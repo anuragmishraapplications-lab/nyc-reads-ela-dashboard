@@ -1,0 +1,5 @@
+audit/*.json
+audit/*.txt
+.DS_Store
+__pycache__/
+data/school-ela-results-public.xlsx
