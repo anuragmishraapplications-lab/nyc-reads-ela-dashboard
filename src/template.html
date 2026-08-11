@@ -447,35 +447,39 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Group by</span><select id="ve-group"></select></div>
     <div class="fg"><span class="fl">Baseline</span><select id="ve-base"></select></div>
     <div class="fg"><span class="fl">Grades</span><select id="ve-band"></select></div>
-    <div class="fg"><span class="fl">Group</span><select id="ve-dim"></select><select id="ve-cat"></select></div>
     <div class="fg"><span class="fl">Measure</span><select id="ve-metric"></select></div>
+    <div class="fg"><span class="fl">Student group</span><select id="ve-dim"></select><select id="ve-cat"></select></div>
+    <div class="fg"><span class="fl">Group size</span><select id="ve-min"></select></div>
+    <div class="fg"><span class="fl">Show</span><div id="ve-ms-groups"></div></div>
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="ve-marks-t" checked> Phase markers</label>
+    <button class="btn gh" id="ve-reset" type="button">Reset filters</button>
     <button class="btn gh" data-csv="ve">Download CSV</button>
   </div>
 
   <div class="note info" id="ve-insight"></div>
   <div id="ve-overlap"></div>
+  <div id="ve-hidden"></div>
 
-  <div class="g2">
-    <div class="cd">
-      <div class="cdh"><div><div class="ct">Change by group, baseline to 2026</div>
-        <div class="cs" id="ve-sub"></div></div>
-        <button class="btn gh" data-png="ve-bar">PNG</button></div>
-      <div class="cc lg" id="wrap-ve-bar"><canvas id="ve-bar"></canvas></div>
-    </div>
-    <div class="cd">
-      <div class="cdh"><div><div class="ct">Group results by year, 2023 to 2026</div>
-        <div class="cs">Each line aggregates the districts in that group by summing student counts.</div></div>
-        <button class="btn gh" data-png="ve-trend">PNG</button></div>
-      <div class="cc lg" id="wrap-ve-trend"><canvas id="ve-trend"></canvas></div>
-      <div class="mkl" id="ve-trend-marks"></div>
-    </div>
+  <div class="cd">
+    <div class="cdh"><div><div class="ct">Where each group stands, and how far it moved</div>
+      <div class="cs" id="ve-sub"></div>
+      <div class="cs">Each row runs from the baseline year (hollow dot) to 2026 (filled dot). The number of districts in the group is in brackets. Green means the movement is in the direction of improvement.</div></div>
+      <button class="btn gh" data-png="ve-slope">PNG</button></div>
+    <div class="cc" id="wrap-ve-slope" style="height:340px"><canvas id="ve-slope"></canvas></div>
+  </div>
+
+  <div class="cd">
+    <div class="cdh"><div><div class="ct">Group results by year, 2023 to 2026</div>
+      <div class="cs">The same groups over time. Each line aggregates the districts in that group by summing student counts. Use the group-size and show filters above to reduce the number of lines.</div></div>
+      <button class="btn gh" data-png="ve-trend">PNG</button></div>
+    <div class="cc lg" id="wrap-ve-trend"><canvas id="ve-trend"></canvas></div>
+    <div class="mkl" id="ve-trend-marks"></div>
   </div>
 
   <div class="cd">
     <div class="cdh"><div><div class="ct">Results by group and year</div>
-      <div class="cs">Districts in each group, students tested in 2026, the measure in each year, and the change from the selected baseline.</div></div></div>
+      <div class="cs">Every group, including any not charted above. Districts in each group, students tested in 2026, the measure in each year, and the change from the selected baseline.</div></div></div>
     <div class="tw"><table id="ve-table"></table></div>
   </div>
 </section>

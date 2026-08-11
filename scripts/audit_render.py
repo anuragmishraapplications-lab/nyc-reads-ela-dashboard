@@ -183,9 +183,8 @@ for e in REN:
                 cmp(f'tf trend {gk} {y} {m}', e['trend'][gi]['v'][yi], val, 1e-5)
 
     elif p=='ve':
-        grp,bk,mk=e['st']; key=MET[mk]; base=2024
+        grp,bk,mk,minsize=e['st']; key=MET[mk]; base=2024
         VEND=json.load(open(os.path.join(R,'data/payload.json')))['vendors']
-        # rebuild the groups independently from the payload's vendor roster
         if grp=='reads':
             groups=[(v,[i for i in range(32) if VEND['readsRoster'].index(v) in VEND['byDistrict'][i]['r']])
                     for v in VEND['readsRoster']]
@@ -194,25 +193,38 @@ for e in REN:
                         and VEND['ecRoster'][VEND['byDistrict'][i]['ec']]==c])
                     for c in VEND['ecRoster']]
         groups=[(n,ds) for n,ds in groups if ds]
-        rows=[]
+        good={'prof':1,'l1':-1,'l4':1,'mean':1}[mk]
+        # charted groups: size threshold, ranked by the 2026 LEVEL
+        charted=[]
+        for n,ds in groups:
+            if len(ds) < int(minsize): continue
+            gids=['%02d'%(i+1) for i in ds]
+            cur=A('dist',gids,bk,2026,0); bse=A('dist',gids,bk,base,0)
+            if cur and bse: charted.append((n,ds,gids,cur,bse))
+        charted.sort(key=lambda r:-r[3][key]*good)
+        cmp(f've-slope labels {e["st"]}', e['slab'],
+            [f'{n} ({len(ds)})' for n,ds,_,_,_ in charted])
+        for i,(n,ds,gids,cur,bse) in enumerate(charted):
+            pair=e['slope'][0]['v'][i]
+            cmp(f've-slope from {n} {e["st"]}', pair[0], bse[key], 1e-5)
+            cmp(f've-slope to {n} {e["st"]}',   pair[1], cur[key], 1e-5)
+        # the table carries EVERY group, ranked by level
+        allrows=[]
         for n,ds in groups:
             gids=['%02d'%(i+1) for i in ds]
             cur=A('dist',gids,bk,2026,0); bse=A('dist',gids,bk,base,0)
-            if cur: rows.append((n,gids,cur,bse,(cur[key]-bse[key]) if cur and bse else None))
-        good={'prof':1,'l1':-1,'l4':1,'mean':1}[mk]
-        ranked=sorted(rows,key=lambda r:-r[4]*good)
-        cmp(f've-bar labels {e["st"]}', e['blab'], [r[0] for r in ranked])
-        for i,r in enumerate(ranked):
-            cmp(f've-bar v {r[0]} {e["st"]}', e['bar'][0]['v'][i], r[4], 1e-5)
-        for ri,r in enumerate(ranked):
+            if cur: allrows.append((n,ds,gids,cur,bse))
+        allrows.sort(key=lambda r:-r[3][key]*good)
+        for ri,(n,ds,gids,cur,bse) in enumerate(allrows):
             trow=e['tbl'][ri+1]
-            cmp(f've-tbl name {r[0]} {e["st"]}', trow[0], r[0])
-            cmp(f've-tbl nd {r[0]} {e["st"]}', trow[1], str(len(r[1])))
-            cmp(f've-tbl n {r[0]} {e["st"]}', trow[2], numf(r[2]['n']))
+            cmp(f've-tbl name {n} {e["st"]}', trow[0].replace(' (not charted)',''), n)
+            cmp(f've-tbl nd {n} {e["st"]}', trow[1], str(len(ds)))
+            cmp(f've-tbl n {n} {e["st"]}', trow[2], numf(cur['n']))
             for yi,y in enumerate(MODERN):
-                a=A('dist',r[1],bk,y,0)
-                cmp(f've-tbl {r[0]} {y} {e["st"]}', trow[3+yi], f1(a[key]) if a else 's')
-            cmp(f've-tbl d {r[0]} {e["st"]}', trow[7], ppf(r[4]))
+                a=A('dist',gids,bk,y,0)
+                cmp(f've-tbl {n} {y} {e["st"]}', trow[3+yi], f1(a[key]) if a else 's')
+            cmp(f've-tbl d {n} {e["st"]}', trow[7],
+                ppf(cur[key]-bse[key]) if bse else 's')
 
 print('='*72); print('RENDER AUDIT — values shown on the page vs independent recomputation'); print('='*72)
 print(f'rendered values checked : {checked:,}')

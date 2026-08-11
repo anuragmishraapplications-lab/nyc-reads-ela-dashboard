@@ -392,6 +392,74 @@ function groupLabel(dimEl, catEl){
   return dim.cats.length > 1 ? CATS[+catEl.value] : 'all students';
 }
 
+/* ---------------------------------------------------------------------
+   Slope (dumbbell) chart.
+   One row per group: a connector from the baseline value to the 2026 value,
+   a hollow dot at the baseline and a filled dot at 2026, coloured by whether
+   the movement is an improvement. Shows level and change in one read, which
+   a bar of changes alone cannot do: a group can move a long way and still sit
+   far below everyone else.
+   --------------------------------------------------------------------- */
+function slopeChart(id, rows, opts){
+  const { baseYear, unit, good, valueFmt = f1 } = opts;
+  /* height follows the number of rows, so four groups do not float in a
+     panel sized for eleven */
+  const wrap = document.getElementById('wrap-' + id);
+  if (wrap) wrap.style.height = Math.max(200, rows.length * 46 + 96) + 'px';
+  const dots = {
+    id: 'dumbbell',
+    afterDatasetsDraw(c){
+      const { ctx, scales:{x, y} } = c;
+      ctx.save();
+      rows.forEach((r, i) => {
+        const yy = y.getPixelForValue(i);
+        const x0 = x.getPixelForValue(r.from), x1 = x.getPixelForValue(r.to);
+        const improving = (r.to - r.from) * good > 0;
+        const col = improving ? '#0F7B6C' : '#C0483C';
+        /* baseline: hollow */
+        ctx.beginPath(); ctx.arc(x0, yy, 5.5, 0, 7); ctx.fillStyle = '#fff';
+        ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = '#94A3B8'; ctx.stroke();
+        /* 2026: filled */
+        ctx.beginPath(); ctx.arc(x1, yy, 6, 0, 7); ctx.fillStyle = col; ctx.fill();
+        /* change, printed past the leading dot */
+        ctx.font = '700 11px Hind'; ctx.fillStyle = col;
+        ctx.textBaseline = 'middle';
+        const d = r.to - r.from;
+        const txt = `${pp(d)}${unit}`;
+        if (x1 >= x0){ ctx.textAlign = 'left'; ctx.fillText(txt, x1 + 11, yy); }
+        else { ctx.textAlign = 'right'; ctx.fillText(txt, x1 - 11, yy); }
+      });
+      ctx.restore();
+    }
+  };
+  draw(id, {
+    type: 'bar',
+    data: { labels: rows.map(r => r.label), datasets: [{
+      label: 'change',
+      data: rows.map(r => [r.from, r.to]),
+      backgroundColor: rows.map(r => (r.to - r.from) * good > 0 ? '#0F7B6C55' : '#C0483C55'),
+      borderWidth: 0, barThickness: 4, borderSkipped: false,
+    }]},
+    options: {
+      indexAxis: 'y',
+      layout: { padding: { right: 58 } },
+      scales: {
+        x: gridY(`${opts.axisLabel} — hollow dot ${baseYear}, filled dot 2026`),
+        y: { grid: { display:false }, ticks: { font:{ size:11.5 }, autoSkip:false } },
+      },
+      plugins: {
+        legend: { display:false },
+        tooltip: { callbacks: {
+          title: c => rows[c[0].dataIndex].label,
+          label: c => { const r = rows[c.dataIndex];
+            return [`${baseYear}: ${valueFmt(r.from)}`, `2026: ${valueFmt(r.to)}`,
+                    `Change: ${pp(r.to - r.from)}${unit}`, r.sub].filter(Boolean); } } },
+      },
+    },
+    plugins: [dots],
+  });
+}
+
 /* =====================================================================
    PAGE 1 — CITYWIDE OVERVIEW
    ===================================================================== */
@@ -1317,67 +1385,82 @@ function initVE(){
     { v:'all', t:'All grades (3–8)' },
     { v:'68',  t:'Grades 6–8' },
   ], '35');
+  /* the single-district groups are noise; default to groups of 3 or more */
+  fill($('ve-min'), [
+    { v:'1', t:'Include every group' },
+    { v:'2', t:'2 or more districts' },
+    { v:'3', t:'3 or more districts' },
+    { v:'5', t:'5 or more districts' },
+  ], '3');
+  buildVEPicker();
   on($('ve-dim'), () => { fillCats($('ve-dim'), $('ve-cat')); renderVE(); });
-  ['ve-base','ve-cat','ve-metric','ve-group','ve-band'].forEach(id => on($(id), renderVE));
+  on($('ve-group'), () => { msSel('ve-ms-groups').clear(); buildVEPicker(); renderVE(); });
+  ['ve-base','ve-cat','ve-metric','ve-band','ve-min'].forEach(id => on($(id), renderVE));
+  $('ve-reset').onclick = () => { msSel('ve-ms-groups').clear(); $('ve-min').value='3'; buildVEPicker(); renderVE(); };
 
-  /* roster: every provider and curriculum named in the source */
-  const row = (name, ds, kind) =>
+  const row = (name, ds) =>
     `<tr><td class="nm">${esc(name)}</td><td>${ds.length}</td>
       <td style="white-space:normal">${ds.length
         ? ds.map(i=>`<span class="chip">D${D.districts[i]}</span>`).join('')
         : '<span class="muted">No district in the ELA files</span>'}</td></tr>`;
   $('ve-roster').innerHTML =
     `<thead><tr><th class="nos">NYC Reads PL provider</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
-    + V.readsRoster.map(v => row(v, distsWithReads(v))).join('')
-    + `</tbody>`;
+    + V.readsRoster.map(v => row(v, distsWithReads(v))).join('') + `</tbody>`;
   $('ve-roster2').innerHTML =
     `<thead><tr><th class="nos">Elementary curriculum</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
-    + V.ecRoster.map(c => row(c, distsWithEC(c))).join('')
-    + `</tbody>`;
+    + V.ecRoster.map(c => row(c, distsWithEC(c))).join('') + `</tbody>`;
 }
-/* the groups on this page, as {name, districts[]} */
-function veGroups(){
+/* every group, before any filtering */
+function veAllGroups(){
   return $('ve-group').value === 'reads'
     ? V.readsRoster.map(v => ({ name:v, ds:distsWithReads(v) })).filter(g=>g.ds.length)
     : V.ecRoster.map(c => ({ name:c, ds:distsWithEC(c) })).filter(g=>g.ds.length);
 }
+function buildVEPicker(){
+  multiSelect('ve-ms-groups', 'Groups',
+    veAllGroups().map(g => ({ v:g.name, t:g.name, n:g.ds.length })), renderVE, 'All groups');
+}
+/* the groups actually shown: size threshold, then the explicit picker */
+function veGroups(){
+  const min = +$('ve-min').value;
+  return veAllGroups().filter(g => g.ds.length >= min && msPass('ve-ms-groups', g.name));
+}
 function renderVE(){
   const base=+$('ve-base').value, cat=+$('ve-cat').value, mk=$('ve-metric').value;
   const M=METRICS[mk], bk=$('ve-band').value;
-  const groups = veGroups();
+  const groups = veGroups(), all = veAllGroups();
   const kindLabel = $('ve-group').value === 'reads' ? 'PL provider' : 'curriculum';
-  const overlap = $('ve-group').value === 'reads'
-    && ALL_DIST.some(i => readsNames(i).length > 1);
+  const unit = mk==='mean' ? '' : 'pp';
 
   const rows = groups.map(g => {
     const cur = agg('dist', g.ds, bk, 2026, cat);
     const bse = agg('dist', g.ds, bk, base, cat);
     return { ...g, cur, bse, d: cur && bse ? M.get(cur)-M.get(bse) : null };
-  }).filter(r => r.cur);
-  const ranked = rows.slice().sort((a,b)=>(b.d-a.d)*M.good);
+  }).filter(r => r.cur && r.bse);
+  const ranked = rows.slice().sort((a,b)=>(M.get(b.cur)-M.get(a.cur))*M.good);
 
   $('ve-sub').textContent = `${M.label}, ${band(bk).label.toLowerCase()}, ${groupLabel($('ve-dim'),$('ve-cat')).toLowerCase()}.`;
 
-  draw('ve-bar', {
-    type:'bar',
-    data:{ labels: ranked.map(r=>r.name), datasets:[{
-      label:`Change in ${M.short}`, data: ranked.map(r=>r.d), borderWidth:0,
-      backgroundColor: ranked.map(r => (r.d*M.good) > 0 ? '#0F7B6C' : '#C0483C') }]},
-    options:{ indexAxis:'y',
-      scales:{ x:gridY(`change vs ${base}${mk==='mean'?' (points)':' (pp)'}`),
-               y:{grid:{display:false},ticks:{font:{size:11.5},autoSkip:false}} },
-      plugins:{ legend:{display:false},
-        tooltip:{callbacks:{ label:c=>{ const r=ranked[c.dataIndex];
-          return [`${M.short}: ${f1(M.get(r.bse))} → ${f1(M.get(r.cur))}`,
-                  `Change: ${pp(r.d)}${mk==='mean'?'':'pp'}`,
-                  `${r.ds.length} district${r.ds.length===1?'':'s'} · ${num(r.cur.n)} tested in 2026`]; }}} } }
-  });
+  /* hidden-group notice, so nothing is silently dropped */
+  const hidden = all.filter(g => !groups.some(x => x.name === g.name));
+  $('ve-hidden').innerHTML = hidden.length
+    ? `<div class="note neut" style="margin-bottom:18px"><b>${hidden.length} group${hidden.length===1?'':'s'} not shown:</b> `
+      + hidden.map(g=>`${esc(g.name)} (${g.ds.length})`).join(', ')
+      + `. ${(+$('ve-min').value)>1 ? `Groups below the ${$('ve-min').value}-district threshold rest on too few districts to read as a trend. ` : ''}`
+      + `They remain in the table below and in the CSV.</div>`
+    : '';
+
+  slopeChart('ve-slope', ranked.map(r => ({
+    label: `${r.name} (${r.ds.length})`,
+    from: M.get(r.bse), to: M.get(r.cur),
+    sub: `${r.ds.length} district${r.ds.length===1?'':'s'} · ${num(r.cur.n)} tested in 2026`,
+  })), { baseYear: base, unit, good: M.good, axisLabel: M.short });
 
   const PAL=['#1C355E','#0070B9','#00A0DD','#6D345F','#4F748B','#6FB0C7','#C0483C','#E8A33D',
              '#0F7B6C','#8A5A44','#7C6BAD'];
   draw('ve-trend', {
     type:'line',
-    data:{ labels:MODERN.map(String), datasets: rows.map((r,i)=>({
+    data:{ labels:MODERN.map(String), datasets: ranked.map((r,i)=>({
       label:`${r.name} (${r.ds.length})`, borderColor:PAL[i%PAL.length], backgroundColor:PAL[i%PAL.length],
       data: MODERN.map(y=>{ const a=agg('dist',r.ds,bk,y,cat); return a?M.get(a):null; }),
       borderWidth:2.6, tension:.25, pointRadius:4 })) },
@@ -1387,25 +1470,35 @@ function renderVE(){
   });
   $('ve-trend-marks').innerHTML = MARKS.ve ? markHTML(WAVES) : '';
 
+  /* the table always carries every group, filtered or not */
+  const full = all.map(g => {
+    const cur = agg('dist', g.ds, bk, 2026, cat), bse = agg('dist', g.ds, bk, base, cat);
+    return { ...g, cur, bse, d: cur && bse ? M.get(cur)-M.get(bse) : null, shown: groups.some(x=>x.name===g.name) };
+  }).filter(r=>r.cur).sort((a,b)=>(M.get(b.cur)-M.get(a.cur))*M.good);
   const head = `<thead><tr><th class="nos">${$('ve-group').value==='reads'?'PL provider':'Curriculum'}</th>
     <th class="nos">Districts</th><th class="nos">Tested 2026</th>`
     + MODERN.map(y=>`<th class="nos">${y}</th>`).join('')
     + `<th class="nos">Δ ${base}→2026</th></tr></thead>`;
-  $('ve-table').innerHTML = head + '<tbody>' + ranked.map(r =>
-    `<tr><td class="nm">${esc(r.name)}</td><td>${r.ds.length}</td><td>${num(r.cur.n)}</td>`
+  $('ve-table').innerHTML = head + '<tbody>' + full.map(r =>
+    `<tr${r.shown?'':' style="opacity:.5"'}><td class="nm">${esc(r.name)}${r.shown?'':' <span class="muted" style="font-weight:500">(not charted)</span>'}</td>`
+    + `<td>${r.ds.length}</td><td>${num(r.cur.n)}</td>`
     + MODERN.map(y=>{ const a=agg('dist',r.ds,bk,y,cat); return `<td>${a?f1(M.get(a)):'s'}</td>`; }).join('')
     + `<td><span class="cell" style="${heat(r.d,6,M.good)}">${r.d==null?'s':pp(r.d)}</span></td></tr>`).join('')
     + '</tbody>';
 
-  const spread = ranked.length>1
-    ? Math.abs(ranked[0].d - ranked[ranked.length-1].d) : 0;
+  /* insight, and an explicit warning when 2025 is the baseline */
+  const anomaly = base === 2025
+    ? ` <b>Note the baseline.</b> 2025 sits well above 2024 and 2026 everywhere in the city, so measuring from 2025 makes almost every group look negative. That is a property of the baseline year, not of these groups — compare against 2023 or 2024 as well before reading anything into it.`
+    : '';
   $('ve-insight').innerHTML = ranked.length
-    ? `Grouping the 32 districts by ${kindLabel} and measuring ${M.label.toLowerCase()} from ${base} to 2026 on ${band(bk).label.toLowerCase()}: `
-      + `the groups span ${pp(ranked[ranked.length-1].d)} to ${pp(ranked[0].d)}${mk==='mean'?' points':'pp'}, a spread of ${f1(spread)}${mk==='mean'?' points':'pp'}. `
-      + `Group sizes are very uneven — ${ranked.map(r=>`${r.name} ${r.ds.length}`).slice(0,4).join(', ')} — so the smaller groups rest on a handful of districts and will move a long way on very little.`
-    : 'No group has data for this combination.';
-  $('ve-overlap').innerHTML = overlap
-    ? `<div class="note warn" style="margin-bottom:0"><b>Districts can appear in more than one provider group.</b> Several districts work with two Reads providers, so the provider groups overlap and do not partition the city. A district with two providers is counted in both, and the group totals therefore sum to more than the citywide total.</div>`
+    ? `Grouping the 32 districts by ${kindLabel}, on ${band(bk).label.toLowerCase()}: `
+      + `in 2026 the ${ranked.length} charted groups run from <b>${f1(M.get(ranked[ranked.length-1].cur))}</b> to <b>${f1(M.get(ranked[0].cur))}</b>, `
+      + `and their change from ${base} runs from <b>${pp(Math.min(...ranked.map(r=>r.d)))}</b> to <b>${pp(Math.max(...ranked.map(r=>r.d)))}${unit}</b>. `
+      + `Groups differ far more in where they started than in how they moved, which is what you would expect when districts were not assigned to ${kindLabel}s for comparison.`
+      + anomaly
+    : 'No group passes the current filters.';
+  $('ve-overlap').innerHTML = $('ve-group').value === 'reads' && ALL_DIST.some(i => readsNames(i).length > 1)
+    ? `<div class="note warn" style="margin-bottom:18px"><b>Districts can appear in more than one provider group.</b> Several districts work with two Reads providers, so the provider groups overlap and do not partition the city. A district with two providers is counted in both, and the group totals therefore sum to more than the citywide total.</div>`
     : '';
 }
 function csvVE(){
