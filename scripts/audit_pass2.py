@@ -245,7 +245,7 @@ for i,d in enumerate(DISTRICTS):
     cmp(f'csv di dprof {d}', r[15], f'{cur["prof"]-bse["prof"]:.2f}')
     dl1=cur['l1']-bse['l1']; dpr=cur['prof']-bse['prof']
     cmp(f'csv di sig {d}', r[16],
-        'Both improved' if dl1<0 and dpr>0 else 'One improved' if dl1<0 or dpr>0 else 'Neither')
+        'Improved on both' if dl1<0 and dpr>0 else 'Mixed' if dl1<0 or dpr>0 else 'Worse on both')
 
 # bo CSV: grades 3-5
 rows=CSV['bo']; bk='35'

@@ -499,11 +499,14 @@ function diRows(){
   }
   return out;
 }
+/* The signal Liz asked for: a district is "green" when it moved the right way
+   on BOTH measures — fewer Level 1s and higher proficiency — and "flagged"
+   when it moved the wrong way on both. Anything else is mixed. */
 function signal(r){
-  if (r.dprof==null || r.dl1==null) return { t:'—', c:'#9CA3AF', rank:-1 };
-  if (r.dl1<0 && r.dprof>0) return { t:'Both improved', c:'#0F7B6C', rank:3 };
-  if (r.dl1<0 || r.dprof>0) return { t:'One improved',  c:'#6FB0C7', rank:2 };
-  return { t:'Neither', c:'#C0483C', rank:1 };
+  if (r.dprof==null || r.dl1==null) return { t:'—', c:'#9CA3AF', rank:-1, k:'na' };
+  if (r.dl1<0 && r.dprof>0) return { t:'Improved on both', c:'#0F7B6C', rank:3, k:'green' };
+  if (r.dl1<0 || r.dprof>0) return { t:'Mixed',            c:'#6FB0C7', rank:2, k:'mixed' };
+  return { t:'Worse on both', c:'#C0483C', rank:1, k:'flag' };
 }
 function renderDI(){
   const base=+$('di-base').value, rows=diRows(), mk=$('di-metric').value, M=METRICS[mk];
@@ -529,6 +532,32 @@ function renderDI(){
     : 'No districts have data for this combination — the group is suppressed at district level.';
 
   $('di-tblsub').innerHTML = `2026 levels and change from ${base}, ${bl}, ${esc(gl.toLowerCase())}. Click a column heading to sort. Cells shaded within the column; green is the direction of improvement.`;
+
+  /* named lists, so the two groups that matter can be read at a glance */
+  const byMove = (a,b) => (b.dprof - a.dprof);
+  const green = valid.filter(r=>signal(r).k==='green').sort(byMove);
+  const flag  = valid.filter(r=>signal(r).k==='flag').sort((a,b)=>a.dprof-b.dprof);
+  const mixed = valid.filter(r=>signal(r).k==='mixed');
+  const chips = (rows, col) => rows.length
+    ? rows.map(r=>`<span class="dchip" style="border-color:${col}44;background:${col}0F">`
+        + `<b style="color:${col}">D${D.districts[r.i]}</b> `
+        + `<span class="dchip-n">${pp(r.dprof)} / ${pp(r.dl1)}</span>`
+        + `<span class="dchip-p">${r.elem==='Elem Phase 1'?'P1':r.elem==='Elem Phase 2'?'P2':'—'}${r.ms!=='—'?' · MS1':''}</span></span>`).join('')
+    : '<span class="muted">None on this selection.</span>';
+  $('di-flags').innerHTML = `
+    <div class="flagbox">
+      <div class="flaghd"><span class="dot" style="background:#0F7B6C"></span>
+        Improved on both <b>(${green.length})</b>
+        <span class="muted">fewer Level 1s and higher proficiency vs ${base}</span></div>
+      <div class="chiprow">${chips(green,'#0F7B6C')}</div>
+    </div>
+    <div class="flagbox">
+      <div class="flaghd"><span class="dot" style="background:#C0483C"></span>
+        Worse on both <b>(${flag.length})</b>
+        <span class="muted">more Level 1s and lower proficiency vs ${base}</span></div>
+      <div class="chiprow">${chips(flag,'#C0483C')}</div>
+    </div>
+    <div class="flagnote">Each chip shows the district, then its change in proficiency and in the Level&nbsp;1 share in percentage points, then its NYC Reads wave (P1 or P2 elementary, MS1 if it also began the middle-school rollout). ${mixed.length} district${mixed.length===1?'':'s'} moved the right way on one measure only and ${mixed.length===1?'is':'are'} not listed here.</div>`;
 
   /* ---- scatter ---- */
   const pts = valid.map(r=>({ x:r.dl1, y:r.dprof, r:Math.max(4,Math.min(15,Math.sqrt(r.cur.n)/12)), d:r }));

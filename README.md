@@ -12,12 +12,11 @@ embedded; only webfonts load from Google and fall back cleanly to system serif/s
 | Page | What it answers |
 |---|---|
 | Citywide overview | Where the city stands in 2026 and how far it has moved from a baseline you pick (2023, 2024 or 2025). Level distribution by year and by grade. |
-| District explorer | All 32 districts on any grade band and any student group. Scatter of Δ Level 1 against Δ proficiency with the "improved on both" quadrant shaded, ranked bars, sortable table, CSV. |
+| District explorer | All 32 districts on any grade band and any student group. Names the districts that improved on both measures and those that got worse on both, each tagged with its NYC Reads wave. Scatter of Δ Level 1 against Δ proficiency with the "improved on both" quadrant shaded, ranked bars, sortable table, CSV. |
 | Boroughs | Borough trends and distributions; every district as a bar coloured by borough; borough × grade matrix. |
 | NYC Reads phases | Elementary Phase 1 vs Phase 2 on tested grades 3–5, the middle-school wave on grades 6–8, group-contrast table, and a placebo check. |
 | Subgroups & gaps | Every reported student group at city / borough / district level, plus five paired proficiency gaps over time. |
-| Test format | The paper-to-computer transition, grouped by the year each grade moved. |
-| Data & method | Sources, definitions, the checks that were run, and the limits that follow. |
+| Test format | The paper-to-computer transition, grouped by the year each grade moved. Each line is dashed with hollow points while those grades were on paper and solid with filled points once they moved, so the switch is visible without annotations. |
 
 Every chart has a **PNG** button; every page has a **Download CSV** button that exports
 exactly the view on screen (so results can be dropped straight into a deck).
@@ -61,6 +60,7 @@ any intermediate artefact.
 ```bash
 python3 scripts/audit_engine.py   # 40,698 combinations
 python3 scripts/audit_render.py   # 8,324 rendered values
+python3 scripts/audit_pass2.py    # 4,030 chart, table and CSV values
 ```
 
 | Audit | Coverage | Result |
@@ -68,6 +68,7 @@ python3 scripts/audit_render.py   # 8,324 rendered values
 | `audit_raw.py` | Internal consistency of all 30,728 source rows | counts sum to tested; `%` = count/tested; `L3+4 = L3+L4`; max deviation 5.7e-6 pp |
 | `audit_engine.py` | Every level × geography × grade band × year × student group = **40,698** combinations pulled out of the live page | **0 mismatches.** Max deviation 5e-7 pp on percentages, 9.8e-7 on mean scale score. Also cross-checks all 28,523 cells against the files' own published `%` columns (agreement to 4.3e-6 pp, the source's float precision). |
 | `audit_render.py` | **8,324** values actually rendered — KPI cards, chart datapoints, table cells, signs and directions of every change — across 114 filter states | **0 mismatches** |
+| `audit_pass2.py` | **4,030** more: the diverging grade chart, the 2022 reference chart, the district scatter and ranked bars, the borough matrix and district bars, the phase contrast table, the gap chart, the per-grade format table, and all six **CSV exports in full** | **0 mismatches** |
 
 Claims in the team's working doc were reproduced exactly: citywide Level 1 26.1% → 24.3%
 (2024→2026); 27 of 32 districts down on Level 1; largest falls in Districts 23, 7, 16
@@ -97,8 +98,15 @@ and 5; and 23, 16, 5 confirmed as Elementary Phase 1.
 ## Not included
 
 Professional-learning provider and curriculum by district were requested but no source
-file was available, so no such field appears anywhere. Mathematics, Science, charter
-schools and the school-level file are out of scope.
+file was available, so no such field appears anywhere. Mathematics, Science and charter
+schools are out of scope.
+
+**School level.** The meeting scoped this to citywide, borough and district for a first
+cut, so the school file is not loaded. It is present and usable: 1,129 schools over
+33,793 rows in its All Students tab, with the same columns plus DBN and school name.
+Adding a school page is straightforward — the same engine handles it — and would let you
+see which schools drive a district's movement, which is the natural next question for
+targeting support.
 
 ## Layout
 
