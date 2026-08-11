@@ -59,6 +59,23 @@ PHASE = {
     'ms2':   [2, 4, 8, 10, 14, 18, 20, 26, 29, 32],                          # +75
 }
 
+# ---------------------------------------------------------------------------
+# NYC Reads / NYC Solves vendor and curriculum assignments, by district.
+# Source: "2026-27 District Reads Solves Data (Draft).xlsx", sheet
+# "District Sustainability Conditi".
+#
+# ONLY the vendor, curriculum and year-joined columns are read. The source
+# sheet also carries superintendent and deputy names, their email addresses,
+# and internal district-condition narrative. None of that is loaded, and the
+# source workbook is kept out of version control (see .gitignore), because the
+# published dashboard is public.
+# ---------------------------------------------------------------------------
+VENDOR_SRC = 'private/2026-27 District Reads Solves Data (Draft).xlsx'
+VENDOR_SHEET = 'District Sustainability Conditi'
+VENDOR_COLS = ('Reads Vendor', 'Solves Vendor', 'NYC Reads Elementary Curriculum',
+               'NYC Reads MS Curriculum', 'NYC Solves Curriculum')
+BANNED_COLS = ('Superintendent', 'Supt Email', 'Dept Supt', 'Dep Supt Email', 'Supt')
+
 stats = {'read': 0, 'kept': 0, 'suppressed': 0, 'bad': 0}
 CHECKS = []          # populated by read_level / main; every one must pass
 INVENTORY = []
@@ -136,6 +153,82 @@ def pack(rows, geo_index):
         packed.append([g, gi, yi, ci, nt, ms, c1, c2, c3, c4])
     packed.sort()
     return packed
+
+
+def read_vendors(base):
+    """District -> vendor / curriculum record. Personal columns are never read."""
+    import re
+    path = os.path.join(base, VENDOR_SRC)
+    if not os.path.exists(path):
+        print('WARNING: vendor source not found, vendor page will be empty')
+        return None
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    ws = wb[VENDOR_SHEET]
+    rows = list(ws.iter_rows(values_only=True))
+    hdr = [('' if c is None else str(c)).strip() for c in rows[1]]
+    H = {h: i for i, h in enumerate(hdr)}
+    join_e = [k for k in hdr if k.startswith('NYC Reads Year Joined') and 'Elementary' in k][0]
+    join_m = 'NYC Reads Year Joined Middle School'
+
+    def cell(r, k):
+        v = r[H[k]]
+        return '' if v is None else str(v).strip()
+
+    recs = {}
+    for r in rows[2:]:
+        if not r or not r[0]:
+            continue
+        m = re.fullmatch(r'District\s+(\d+)', str(r[0]).strip())
+        if not m:
+            continue                       # high-school networks: not in the ELA files
+        n = int(m.group(1))
+        if not 1 <= n <= 32:
+            continue                       # District 75 is not reported in the district file
+        recs[n] = {
+            'reads':  [x.strip() for x in cell(r, 'Reads Vendor').split(',') if x.strip()],
+            'solves': cell(r, 'Solves Vendor'),
+            'ec':     cell(r, 'NYC Reads Elementary Curriculum'),
+            'mc':     cell(r, 'NYC Reads MS Curriculum'),
+            'sc':     cell(r, 'NYC Solves Curriculum'),
+            'je':     cell(r, join_e),
+            'jm':     cell(r, join_m),
+        }
+
+    # the year-joined columns must agree with the phase lists already in the tool
+    exp_e = {**{d: 'SY23-24' for d in PHASE['elem1']}, **{d: 'SY24-25' for d in PHASE['elem2']}}
+    exp_m = {**{d: 'SY25-26' for d in PHASE['ms1']},   **{d: 'SY26-27' for d in PHASE['ms2']}}
+    for n, v in recs.items():
+        assert v['je'] == exp_e.get(n, ''), ('elem year mismatch', n, v['je'], exp_e.get(n))
+        assert v['jm'] == exp_m.get(n, ''), ('MS year mismatch', n, v['jm'], exp_m.get(n))
+    assert len(recs) == 32, 'expected all 32 districts, got %d' % len(recs)
+
+    # rosters, from the districts actually present
+    reads_roster  = sorted({x for v in recs.values() for x in v['reads']})
+    solves_roster = sorted({v['solves'] for v in recs.values() if v['solves']})
+    ec_roster     = sorted({v['ec'] for v in recs.values() if v['ec']})
+    mc_roster     = sorted({v['mc'] for v in recs.values() if v['mc']})
+
+    by = []
+    for n in range(1, 33):
+        v = recs[n]
+        by.append({
+            'r':  [reads_roster.index(x) for x in v['reads']],
+            's':  solves_roster.index(v['solves']) if v['solves'] else None,
+            'ec': ec_roster.index(v['ec']) if v['ec'] else None,
+            'mc': mc_roster.index(v['mc']) if v['mc'] else None,
+            'sc': v['sc'],
+        })
+    payload = {'readsRoster': reads_roster, 'solvesRoster': solves_roster,
+               'ecRoster': ec_roster, 'mcRoster': mc_roster, 'byDistrict': by}
+    # belt and braces: no personal data may appear anywhere in the emitted blob
+    blob = json.dumps(payload)
+    assert '@' not in blob, 'an email address reached the vendor payload'
+    for c in BANNED_COLS:
+        assert c.lower() not in blob.lower(), 'a personal column reached the payload: ' + c
+    print('vendors: %d reads vendors, %d solves vendors, %d elem curricula; '
+          'year-joined agrees with phase lists for all 32 districts'
+          % (len(reads_roster), len(solves_roster), len(ec_roster)))
+    return payload
 
 
 def main():
@@ -237,6 +330,7 @@ def main():
         'districts': DISTRICTS,
         'districtBoro': [BORO_OF[d] for d in DISTRICTS],
         'phase': PHASE,
+        'vendors': read_vendors(D),
         'meta': {
             'rowsRead': stats['read'], 'rowsChecked': stats['kept'],
             'suppressed': stats['suppressed'],

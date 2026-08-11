@@ -112,18 +112,20 @@ for e in REN:
             n=int(d)
             cmp(f'di elem {d}', row[2], 'Elem Phase 1' if n in PHASE['elem1'] else 'Elem Phase 2' if n in PHASE['elem2'] else '—')
             cmp(f'di ms {d}', row[3], 'MS Phase 1' if n in PHASE['ms1'] else 'MS Phase 2' if n in PHASE['ms2'] else '—')
-            cmp(f'di n {d} {e["st"]}', row[4], numf(cur['n']) if cur else 's')
-            cmp(f'di prof {d} {e["st"]}', row[5], f1(cur['prof']) if cur else 's')
-            cmp(f'di dprof {d} {e["st"]}', row[6], ppf(cur['prof']-bse['prof']) if cur and bse else 's')
-            cmp(f'di l1 {d} {e["st"]}', row[7], f1(cur['l1']) if cur else 's')
-            cmp(f'di dl1 {d} {e["st"]}', row[8], ppf(cur['l1']-bse['l1']) if cur and bse else 's')
-            cmp(f'di l4 {d} {e["st"]}', row[9], f1(cur['l4']) if cur else 's')
-            cmp(f'di mean {d} {e["st"]}', row[10], f1(cur['mean']) if cur else 's')
+            # columns: 0 name 1 boro 2 elem 3 ms 4 readsPL 5 elemCurr 6 tested
+            #          7 %L3-4 8 dL3-4 9 %L1 10 dL1 11 %L4 12 mean 13 signal
+            cmp(f'di n {d} {e["st"]}', row[6], numf(cur['n']) if cur else 's')
+            cmp(f'di prof {d} {e["st"]}', row[7], f1(cur['prof']) if cur else 's')
+            cmp(f'di dprof {d} {e["st"]}', row[8], ppf(cur['prof']-bse['prof']) if cur and bse else 's')
+            cmp(f'di l1 {d} {e["st"]}', row[9], f1(cur['l1']) if cur else 's')
+            cmp(f'di dl1 {d} {e["st"]}', row[10], ppf(cur['l1']-bse['l1']) if cur and bse else 's')
+            cmp(f'di l4 {d} {e["st"]}', row[11], f1(cur['l4']) if cur else 's')
+            cmp(f'di mean {d} {e["st"]}', row[12], f1(cur['mean']) if cur else 's')
             if cur and bse:
                 dl1=cur['l1']-bse['l1']; dpr=cur['prof']-bse['prof']
                 sig='Improved on both' if dl1<0 and dpr>0 else 'Mixed' if dl1<0 or dpr>0 else 'Worse on both'
             else: sig='—'
-            cmp(f'di sig {d} {e["st"]}', row[11], sig)
+            cmp(f'di sig {d} {e["st"]}', row[13], sig)
     elif p=='bo':
         base,bk,m=e['st']; key=MET[m]
         for bi,b in enumerate(BOROS):
@@ -179,6 +181,38 @@ for e in REN:
                     n+=nt;c1+=a;c2+=b;c3+=c;c4+=d;wm+=ms*nt
                 val={'prof':(c3+c4)/n*100,'l1':c1/n*100,'l4':c4/n*100,'mean':wm/n}[m]
                 cmp(f'tf trend {gk} {y} {m}', e['trend'][gi]['v'][yi], val, 1e-5)
+
+    elif p=='ve':
+        grp,bk,mk=e['st']; key=MET[mk]; base=2024
+        VEND=json.load(open(os.path.join(R,'data/payload.json')))['vendors']
+        # rebuild the groups independently from the payload's vendor roster
+        if grp=='reads':
+            groups=[(v,[i for i in range(32) if VEND['readsRoster'].index(v) in VEND['byDistrict'][i]['r']])
+                    for v in VEND['readsRoster']]
+        else:
+            groups=[(c,[i for i in range(32) if VEND['byDistrict'][i]['ec'] is not None
+                        and VEND['ecRoster'][VEND['byDistrict'][i]['ec']]==c])
+                    for c in VEND['ecRoster']]
+        groups=[(n,ds) for n,ds in groups if ds]
+        rows=[]
+        for n,ds in groups:
+            gids=['%02d'%(i+1) for i in ds]
+            cur=A('dist',gids,bk,2026,0); bse=A('dist',gids,bk,base,0)
+            if cur: rows.append((n,gids,cur,bse,(cur[key]-bse[key]) if cur and bse else None))
+        good={'prof':1,'l1':-1,'l4':1,'mean':1}[mk]
+        ranked=sorted(rows,key=lambda r:-r[4]*good)
+        cmp(f've-bar labels {e["st"]}', e['blab'], [r[0] for r in ranked])
+        for i,r in enumerate(ranked):
+            cmp(f've-bar v {r[0]} {e["st"]}', e['bar'][0]['v'][i], r[4], 1e-5)
+        for ri,r in enumerate(ranked):
+            trow=e['tbl'][ri+1]
+            cmp(f've-tbl name {r[0]} {e["st"]}', trow[0], r[0])
+            cmp(f've-tbl nd {r[0]} {e["st"]}', trow[1], str(len(r[1])))
+            cmp(f've-tbl n {r[0]} {e["st"]}', trow[2], numf(r[2]['n']))
+            for yi,y in enumerate(MODERN):
+                a=A('dist',r[1],bk,y,0)
+                cmp(f've-tbl {r[0]} {y} {e["st"]}', trow[3+yi], f1(a[key]) if a else 's')
+            cmp(f've-tbl d {r[0]} {e["st"]}', trow[7], ppf(r[4]))
 
 print('='*72); print('RENDER AUDIT — values shown on the page vs independent recomputation'); print('='*72)
 print(f'rendered values checked : {checked:,}')

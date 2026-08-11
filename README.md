@@ -15,6 +15,7 @@ embedded; only webfonts load from Google and fall back cleanly to system serif/s
 | District explorer | All 32 districts on any grade band and any student group. Names the districts that improved on both measures and those that got worse on both, each tagged with its NYC Reads wave. Scatter of Δ Level 1 against Δ proficiency with the "improved on both" quadrant shaded, ranked bars, sortable table, CSV. |
 | Boroughs | Borough trends and distributions; every district as a bar coloured by borough; borough × grade matrix. |
 | NYC Reads phases | Elementary Phase 1 vs Phase 2 on tested grades 3–5, the middle-school wave on grades 6–8, group-contrast table, and a placebo check. |
+| Providers & curriculum | Districts grouped by the NYC Reads professional learning provider they work with and by the elementary curriculum they adopted, with ELA results for each group. |
 | Subgroups & gaps | Every reported student group at city / borough / district level, plus five paired proficiency gaps over time. |
 | Test format | The paper-to-computer transition, grouped by the year each grade moved. Each line is dashed with hollow points while those grades were on paper and solid with filled points once they moved, so the switch is visible without annotations. |
 
@@ -58,7 +59,8 @@ the real UI. Each re-reads the original `.xlsx` files from scratch rather than r
 any intermediate artefact.
 
 ```bash
-python3 scripts/audit_engine.py   # 40,698 combinations
+python3 scripts/audit_engine.py   # 40,698 combinations, numeric with tolerance
+python3 scripts/audit_digest.py   # 40,698 combinations, exact by hash
 python3 scripts/audit_render.py   # 8,324 rendered values
 python3 scripts/audit_pass2.py    # 4,030 chart, table and CSV values
 ```
@@ -67,7 +69,8 @@ python3 scripts/audit_pass2.py    # 4,030 chart, table and CSV values
 |---|---|---|
 | `audit_raw.py` | Internal consistency of all 30,728 source rows | counts sum to tested; `%` = count/tested; `L3+4 = L3+L4`; max deviation 5.7e-6 pp |
 | `audit_engine.py` | Every level × geography × grade band × year × student group = **40,698** combinations pulled out of the live page | **0 mismatches.** Max deviation 5e-7 pp on percentages, 9.8e-7 on mean scale score. Also cross-checks all 28,523 cells against the files' own published `%` columns (agreement to 4.3e-6 pp, the source's float precision). |
-| `audit_render.py` | **8,324** values actually rendered — KPI cards, chart datapoints, table cells, signs and directions of every change — across 114 filter states | **0 mismatches** |
+| `audit_digest.py` | All **40,698** combinations again, by SHA-256 over the aggregated student counts. Exact integer comparison, no dependence on decimal formatting | **identical hash** |
+| `audit_render.py` | **8,836** values actually rendered — KPI cards, chart datapoints, table cells, signs and directions of every change — across 122 filter states | **0 mismatches** |
 | `audit_pass2.py` | **4,030** more: the diverging grade chart, the 2022 reference chart, the district scatter and ranked bars, the borough matrix and district bars, the phase contrast table, the gap chart, the per-grade format table, and all six **CSV exports in full** | **0 mismatches** |
 
 Claims in the team's working doc were reproduced exactly: citywide Level 1 26.1% → 24.3%
@@ -95,11 +98,26 @@ and 5; and 23, 16, 5 confirmed as Elementary Phase 1.
   size — so the elementary contrast is not distinguishable from a general difference
   between those sets of districts. That is reported as found.
 
+## Vendor and curriculum data
+
+Provider and curriculum assignments come from `2026-27 District Reads Solves Data
+(Draft).xlsx`, sheet "District Sustainability Conditi".
+
+**Only the vendor, curriculum and year-joined columns are read.** That sheet also carries
+superintendent and deputy names, 94 individual email addresses, and internal
+district-condition narrative. None of it is loaded, `extract.py` asserts that no `@` and
+no personal column name can reach the payload, and the source workbook is kept out of
+version control (`data/private/`, gitignored) because the published dashboard is public.
+
+The sheet's "year joined" columns were checked against the NYC Reads phase lists already
+in the tool and agree for **all 32 districts**, which is an independent confirmation of
+the phase assignments.
+
 ## Not included
 
-Professional-learning provider and curriculum by district were requested but no source
-file was available, so no such field appears anywhere. Mathematics, Science and charter
-schools are out of scope.
+Mathematics, Science and charter schools are out of scope. NYC Solves provider and
+curriculum are carried in the district table for reference but no ELA result is ever
+grouped by them, since they concern mathematics.
 
 **School level.** The meeting scoped this to citywide, borough and district for a first
 cut, so the school file is not loaded. It is present and usable: 1,129 schools over
