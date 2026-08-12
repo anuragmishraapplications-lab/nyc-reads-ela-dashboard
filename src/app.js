@@ -86,15 +86,22 @@ const distIdx  = n => D.districts.indexOf(String(n).padStart(2,'0'));
    provider and adopted curriculum, by district). No personal data is
    carried in the payload.
    --------------------------------------------------------------------- */
-const V = D.vendors || { readsRoster:[], solvesRoster:[], ecRoster:[], mcRoster:[], byDistrict:[] };
-const vendorOf   = i => V.byDistrict[i] || { r:[], s:null, ec:null, mc:null, sc:'' };
-const readsNames = i => vendorOf(i).r.map(k => V.readsRoster[k]);
-const solvesName = i => { const s=vendorOf(i).s; return s==null?'':V.solvesRoster[s]; };
-const ecName     = i => { const c=vendorOf(i).ec; return c==null?'':V.ecRoster[c]; };
-const mcName     = i => { const c=vendorOf(i).mc; return c==null?'':V.mcRoster[c]; };
-/* districts using a given reads vendor / curriculum */
-const distsWithReads = v => ALL_DIST.filter(i => readsNames(i).includes(v));
-const distsWithEC    = c => ALL_DIST.filter(i => ecName(i) === c);
+const V = D.vendors || { k5JespRoster:[], k5CurrRoster:[], msJespRoster:[], msCurrRoster:[],
+                         byDistrict:[], phaseDisagree:[], source:'' };
+const vendorOf = i => V.byDistrict[i] || { kj:null, kc:null, mj:null, mc:null };
+const nm = (roster, k) => (k==null ? '' : roster[k]);
+const k5Jesp = i => nm(V.k5JespRoster, vendorOf(i).kj);
+const k5Curr = i => nm(V.k5CurrRoster, vendorOf(i).kc);
+const msJesp = i => nm(V.msJespRoster, vendorOf(i).mj);
+const msCurr = i => nm(V.msCurrRoster, vendorOf(i).mc);
+/* the four ways districts can be grouped on the provider page */
+const VE_FIELDS = {
+  k5j: { label:'K–5 provider (JESP)',   roster:()=>V.k5JespRoster, get:k5Jesp, band:'35' },
+  k5c: { label:'K–5 curriculum',        roster:()=>V.k5CurrRoster, get:k5Curr, band:'35' },
+  msj: { label:'Grades 6–8 provider (JESP)', roster:()=>V.msJespRoster, get:msJesp, band:'68' },
+  msc: { label:'Grades 6–8 curriculum', roster:()=>V.msCurrRoster, get:msCurr, band:'68' },
+};
+const distsWith = (fk, v) => ALL_DIST.filter(i => VE_FIELDS[fk].get(i) === v);
 
 const PHASES = {
   elem1: new Set(D.phase.elem1), elem2: new Set(D.phase.elem2),
@@ -116,6 +123,12 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':
 /* diverging colour ramp; `good` = sign that means improvement */
 function heat(v, scale, good){
   if (v==null || !isFinite(v)) return 'background:#F3F4F6;color:#9CA3AF';
+  if (good === 0){          /* magnitude only: neither direction is "better" */
+    const t = Math.min(1, Math.abs(v)/scale);
+    if (t < 0.06) return 'background:#F1F4F7;color:#41505C';
+    const a = 0.12 + t*0.6;
+    return `background:rgba(109,52,95,${a.toFixed(3)});color:${a>0.45?'#fff':'#43213B'}`;
+  }
   const t = Math.max(-1, Math.min(1, (v*good)/scale));         // +1 = best
   if (Math.abs(t) < 0.06) return 'background:#F1F4F7;color:#41505C';
   const a = Math.min(0.88, 0.16 + Math.abs(t)*0.72);
@@ -638,10 +651,10 @@ function initDI(){
     { v:'ms1',   t:'Middle school Phase 1 · SY 2025–26', n:D.phase.ms1.length },
     { v:'ms2',   t:'Middle school Phase 2 · SY 2026–27', n:D.phase.ms2.length },
   ], renderDI, 'All phases');
-  multiSelect('di-ms-reads', 'Reads PL provider',
-    V.readsRoster.map(v => ({ v, t:v, n: distsWithReads(v).length })), renderDI, 'All providers');
-  multiSelect('di-ms-curr', 'Elementary curriculum',
-    V.ecRoster.map(c => ({ v:c, t:c, n: distsWithEC(c).length })), renderDI, 'All curricula');
+  multiSelect('di-ms-reads', 'K–5 provider (JESP)',
+    V.k5JespRoster.map(v => ({ v, t:v, n: distsWith('k5j',v).length })), renderDI, 'All providers');
+  multiSelect('di-ms-curr', 'K–5 curriculum',
+    V.k5CurrRoster.map(c => ({ v:c, t:c, n: distsWith('k5c',c).length })), renderDI, 'All curricula');
   on($('di-dim'), () => { fillCats($('di-dim'), $('di-cat')); renderDI(); });
   ['di-base','di-grade','di-cat','di-metric'].forEach(id => on($(id), renderDI));
   $('di-reset').onclick = () => {
@@ -658,16 +671,17 @@ function diRows(){
     if (!msPass('di-ms-boro', b)) continue;
     const phases = ['elem1','elem2','ms1','ms2'].filter(k => PHASES[k].has(n));
     if (!msPass('di-ms-phase', phases)) continue;
-    if (!msPass('di-ms-reads', readsNames(i))) continue;
-    if (!msPass('di-ms-curr', ecName(i))) continue;
+    if (!msPass('di-ms-reads', k5Jesp(i))) continue;
+    if (!msPass('di-ms-curr', k5Curr(i))) continue;
     const cur = agg('dist',[i],bk,2026,cat), bse = agg('dist',[i],bk,base,cat);
     out.push({
       i, n, boro:b, label:`District ${D.districts[i]}`,
       elem: phaseElemLabel(n), ms: phaseMsLabel(n),
-      reads: readsNames(i), solves: solvesName(i), ec: ecName(i), mc: mcName(i),
+      reads: k5Jesp(i), ec: k5Curr(i), msj: msJesp(i), mc: msCurr(i),
       cur, bse,
       dprof: cur&&bse ? cur.prof-bse.prof : null,
       dl1:   cur&&bse ? cur.l1  -bse.l1   : null,
+      dn:    cur&&bse&&bse.n ? (cur.n-bse.n)/bse.n*100 : null,
     });
   }
   return out;
@@ -795,15 +809,69 @@ function renderDI(){
 
   /* ---- table ---- */
   renderDITable(rows, base);
+  renderCohort(rows, base);
 }
+/* ---------------------------------------------------------------------
+   Cohort size.
+   The number of students tested is not fixed: some districts lost more than
+   a tenth of their tested cohort between 2024 and 2026. Because a district's
+   result is a percentage of whoever sat the test, a large change in who is
+   being tested is a competing explanation for a large change in the result.
+   This panel puts the two side by side rather than leaving it to be noticed.
+   --------------------------------------------------------------------- */
+function pearson(a, b){
+  const n=a.length, ma=a.reduce((x,y)=>x+y,0)/n, mb=b.reduce((x,y)=>x+y,0)/n;
+  let num=0, da=0, db=0;
+  for (let i=0;i<n;i++){ const x=a[i]-ma, y=b[i]-mb; num+=x*y; da+=x*x; db+=y*y; }
+  return num/Math.sqrt(da*db);
+}
+function renderCohort(rows, base){
+  const pts = rows.filter(r=>r.cur&&r.bse&&r.bse.n).map(r=>({
+    i:r.i, boro:r.boro,
+    dn: (r.cur.n - r.bse.n)/r.bse.n*100,
+    dp: r.dprof, dl: r.dl1,
+  }));
+  if (pts.length < 3){ $('di-cohort-wrap').style.display='none'; return; }
+  $('di-cohort-wrap').style.display='';
+  const rP = pearson(pts.map(p=>p.dn), pts.map(p=>p.dp));
+  const rL = pearson(pts.map(p=>p.dn), pts.map(p=>p.dl));
+
+  draw('di-cohort', {
+    type:'bubble',
+    data:{ datasets: D.boros.map(b=>({
+      label:b, backgroundColor:BORO_COLOR[b]+'CC', borderColor:BORO_COLOR[b], borderWidth:1,
+      data: pts.filter(p=>p.boro===b).map(p=>({x:p.dn, y:p.dp, r:7, d:p}))
+    })).filter(ds=>ds.data.length) },
+    options:{
+      scales:{ x:gridY(`change in students tested vs ${base} (%)`),
+               y:gridY(`change in proficiency vs ${base} (pp)`) },
+      plugins:{ legend:{display:false},
+        tooltip:{callbacks:{ label:c=>{ const d=c.raw.d;
+          return [`District ${D.districts[d.i]} · ${d.boro}`,
+                  `Students tested ${pp(d.dn)}%`,
+                  `Proficiency ${pp(d.dp)}pp`,
+                  `Level 1 ${pp(d.dl)}pp`]; }}} } }
+  });
+
+  const shrank = pts.filter(p=>p.dn < -5), steady = pts.filter(p=>p.dn >= -2);
+  const mean = a => a.reduce((x,y)=>x+y,0)/a.length;
+  $('di-cohort-note').innerHTML =
+    `Across the ${pts.length} districts shown, the change in how many students sat the test correlates with the change in proficiency at <b>r = ${rP.toFixed(2)}</b>, and with the change in the Level&nbsp;1 share at <b>r = ${rL.toFixed(2)}</b>. `
+    + (shrank.length && steady.length
+      ? `The ${shrank.length} districts whose tested cohort shrank by more than 5% averaged <b>${pp(mean(shrank.map(p=>p.dp)))}pp</b> on proficiency and <b>${pp(mean(shrank.map(p=>p.dl)))}pp</b> on Level&nbsp;1; the ${steady.length} whose cohort held steady or grew averaged <b>${pp(mean(steady.map(p=>p.dp)))}pp</b> and <b>${pp(mean(steady.map(p=>p.dl)))}pp</b>. `
+      : '')
+    + `A district's result is a percentage of whoever sat the test, so a cohort that changes size by a tenth is a competing explanation for a large measured gain. This does not say the gains are not real; it says cohort change has to be ruled out before they are attributed to instruction.`;
+}
+
 const DI_COLS = [
   {k:'label', t:'District',    sort:r=>r.n,           kind:'name'},
   {k:'boro',  t:'Borough',     sort:r=>r.boro,        kind:'text'},
   {k:'elem',  t:'Elem phase',  sort:r=>r.elem,        kind:'text'},
   {k:'ms',    t:'MS phase',    sort:r=>r.ms,          kind:'text'},
-  {k:'reads', t:'Reads PL provider', sort:r=>r.reads.join(', '), kind:'list'},
-  {k:'ec',    t:'Elem curriculum',   sort:r=>r.ec,      kind:'text'},
+  {k:'reads', t:'K–5 provider', sort:r=>r.reads, kind:'wrap'},
+  {k:'ec',    t:'K–5 curriculum',   sort:r=>r.ec,      kind:'text'},
   {k:'n',     t:'Tested 2026', sort:r=>r.cur?r.cur.n:-1,        kind:'num'},
+  {k:'dn',    t:'Δ tested %',  sort:r=>r.dn==null?-999:r.dn,     kind:'heat', good:0, scale:12},
   {k:'prof',  t:'% L3–4 2026', sort:r=>r.cur?r.cur.prof:-1, kind:'lvl', hue:'0,112,185', lo:20, hi:80},
   {k:'dprof', t:'Δ L3–4',  sort:r=>r.dprof==null?-99:r.dprof, kind:'heat', good:+1, scale:8},
   {k:'l1',    t:'% L1 2026',   sort:r=>r.cur?r.cur.l1:-1,       kind:'lvl', hue:'192,72,60', lo:5, hi:45},
@@ -827,7 +895,7 @@ function renderDITable(rows, base){
       switch(c.kind){
         case 'name': return `<td class="nm">District ${D.districts[r.i]}</td>`;
         case 'text': return `<td>${esc(r[c.k]) || '<span class="muted">—</span>'}</td>`;
-        case 'list': return `<td style="white-space:normal;min-width:150px">${r.reads.length?r.reads.map(esc).join('<br>'):'<span class="muted">—</span>'}</td>`;
+        case 'wrap': return `<td style="white-space:normal;min-width:140px">${esc(r.reads) || '<span class="muted">—</span>'}</td>`;
         case 'num':  return `<td>${r.cur?num(r.cur.n):'<span class="sup">s</span>'}</td>`;
         case 'lvl':  { const v = r.cur ? (c.k==='prof'?r.cur.prof:c.k==='l1'?r.cur.l1:r.cur.l4) : null;
                        return `<td><span class="cell" style="${shade(v,c.lo,c.hi,c.hue)}">${v==null?'s':f1(v)}</span></td>`; }
@@ -852,14 +920,14 @@ function csvDI(){
   const out=[['NYC Reads ELA Explorer — districts'],
     ['Grades',band($('di-grade').value).label],['Student group',CATS[+$('di-cat').value]],
     ['Baseline',base],['Generated',BUILD],[],
-    ['District','Borough','Elementary phase','Middle school phase','Reads PL provider','Elementary curriculum','MS curriculum','Solves PL provider','Tested 2026',
+    ['District','Borough','Elementary phase','Middle school phase','K-5 provider (JESP)','K-5 curriculum','Grades 6-8 provider (JESP)','Grades 6-8 curriculum','Tested 2026','Change in students tested (%)',
      '% Level 1 2026','% Level 2 2026','% Level 3 2026','% Level 4 2026','% Level 3+4 2026','Mean scale score 2026',
      `Tested ${base}`,`% Level 1 ${base}`,`% Level 3+4 ${base}`,
      'Change in % Level 1 (pp)','Change in % Level 3+4 (pp)','Signal']];
   for (const r of rows.sort((a,b)=>a.n-b.n)){
     out.push([`District ${D.districts[r.i]}`, r.boro, r.elem, r.ms,
-      r.reads.join('; '), r.ec, r.mc, r.solves,
-      r.cur?r.cur.n:'s', r.cur?f2(r.cur.l1):'s', r.cur?f2(r.cur.l2):'s', r.cur?f2(r.cur.l3):'s',
+      r.reads, r.ec, r.msj, r.mc,
+      r.cur?r.cur.n:'s', r.dn==null?'':r.dn.toFixed(2), r.cur?f2(r.cur.l1):'s', r.cur?f2(r.cur.l2):'s', r.cur?f2(r.cur.l3):'s',
       r.cur?f2(r.cur.l4):'s', r.cur?f2(r.cur.prof):'s', r.cur?f1(r.cur.mean):'s',
       r.bse?r.bse.n:'s', r.bse?f2(r.bse.l1):'s', r.bse?f2(r.bse.prof):'s',
       r.dl1==null?'':r.dl1.toFixed(2), r.dprof==null?'':r.dprof.toFixed(2), signal(r).t]);
@@ -882,10 +950,10 @@ function initBO(){
     { v:'ms1',   t:'Middle school Phase 1 · SY 2025–26', n:D.phase.ms1.length },
     { v:'ms2',   t:'Middle school Phase 2 · SY 2026–27', n:D.phase.ms2.length },
   ], renderBO, 'All phases');
-  multiSelect('bo-ms-reads', 'Reads PL provider',
-    V.readsRoster.map(v => ({ v, t:v, n: distsWithReads(v).length })), renderBO, 'All providers');
-  multiSelect('bo-ms-curr', 'Elementary curriculum',
-    V.ecRoster.map(c => ({ v:c, t:c, n: distsWithEC(c).length })), renderBO, 'All curricula');
+  multiSelect('bo-ms-reads', 'K–5 provider (JESP)',
+    V.k5JespRoster.map(v => ({ v, t:v, n: distsWith('k5j',v).length })), renderBO, 'All providers');
+  multiSelect('bo-ms-curr', 'K–5 curriculum',
+    V.k5CurrRoster.map(c => ({ v:c, t:c, n: distsWith('k5c',c).length })), renderBO, 'All curricula');
   on($('bo-dim'), () => { fillCats($('bo-dim'), $('bo-cat')); renderBO(); });
   ['bo-base','bo-grade','bo-cat','bo-metric'].forEach(id => on($(id), renderBO));
   $('bo-reset').onclick = () => {
@@ -905,8 +973,8 @@ function boDistricts(){
     if (!msPass('bo-ms-boro', D.districtBoro[i])) return false;
     const phases = ['elem1','elem2','ms1','ms2'].filter(k => PHASES[k].has(n));
     if (!msPass('bo-ms-phase', phases)) return false;
-    if (!msPass('bo-ms-reads', readsNames(i))) return false;
-    if (!msPass('bo-ms-curr', ecName(i))) return false;
+    if (!msPass('bo-ms-reads', k5Jesp(i))) return false;
+    if (!msPass('bo-ms-curr', k5Curr(i))) return false;
     return true;
   });
 }
@@ -1376,10 +1444,7 @@ function csvTF(){
 function initVE(){
   fillBaselines($('ve-base')); fillDims($('ve-dim')); fillCats($('ve-dim'), $('ve-cat'));
   fillMetrics($('ve-metric'), ['prof','l1','l4','mean'], 'prof');
-  fill($('ve-group'), [
-    { v:'reads', t:'Reads PL provider' },
-    { v:'ec',    t:'Elementary curriculum' },
-  ], 'reads');
+  fill($('ve-group'), Object.entries(VE_FIELDS).map(([k,f]) => ({ v:k, t:f.label })), 'k5j');
   fill($('ve-band'), [
     { v:'35',  t:'Grades 3–5 (reached by the K–5 curriculum)' },
     { v:'all', t:'All grades (3–8)' },
@@ -1394,7 +1459,10 @@ function initVE(){
   ], '3');
   buildVEPicker();
   on($('ve-dim'), () => { fillCats($('ve-dim'), $('ve-cat')); renderVE(); });
-  on($('ve-group'), () => { msSel('ve-ms-groups').clear(); buildVEPicker(); renderVE(); });
+  on($('ve-group'), () => { msSel('ve-ms-groups').clear();
+    /* the grade band follows the field: a K–5 provider only reaches grades 3–5 */
+    $('ve-band').value = VE_FIELDS[$('ve-group').value].band;
+    buildVEPicker(); renderVE(); });
   ['ve-base','ve-cat','ve-metric','ve-band','ve-min'].forEach(id => on($(id), renderVE));
   $('ve-reset').onclick = () => { msSel('ve-ms-groups').clear(); $('ve-min').value='3'; buildVEPicker(); renderVE(); };
 
@@ -1404,17 +1472,22 @@ function initVE(){
         ? ds.map(i=>`<span class="chip">D${D.districts[i]}</span>`).join('')
         : '<span class="muted">No district in the ELA files</span>'}</td></tr>`;
   $('ve-roster').innerHTML =
-    `<thead><tr><th class="nos">NYC Reads PL provider</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
-    + V.readsRoster.map(v => row(v, distsWithReads(v))).join('') + `</tbody>`;
+    `<thead><tr><th class="nos">K–5 provider (JESP)</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
+    + V.k5JespRoster.map(v => row(v, distsWith('k5j',v))).join('') + `</tbody>`;
   $('ve-roster2').innerHTML =
-    `<thead><tr><th class="nos">Elementary curriculum</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
-    + V.ecRoster.map(c => row(c, distsWithEC(c))).join('') + `</tbody>`;
+    `<thead><tr><th class="nos">K–5 curriculum</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
+    + V.k5CurrRoster.map(c => row(c, distsWith('k5c',c))).join('') + `</tbody>`;
+  /* the chart's own Phase column disagrees with the launch timeline; say so */
+  $('ve-phasenote').innerHTML = (V.phaseDisagree||[]).length
+    ? `<div class="note warn"><b>The supplied chart's Phase column disagrees with the NYC Reads launch timeline for ${V.phaseDisagree.length} districts.</b> `
+      + V.phaseDisagree.map(x=>`D${String(x.d).padStart(2,'0')} (timeline Phase ${x.timeline}, chart Phase ${x.chart})`).join(', ')
+      + `. This tool keeps the launch timeline, because it is corroborated by the "year joined" columns of the 2026-27 workbook for all 32 districts. Worth resolving with NYCPS before the phase contrasts are quoted.</div>`
+    : '';
 }
 /* every group, before any filtering */
 function veAllGroups(){
-  return $('ve-group').value === 'reads'
-    ? V.readsRoster.map(v => ({ name:v, ds:distsWithReads(v) })).filter(g=>g.ds.length)
-    : V.ecRoster.map(c => ({ name:c, ds:distsWithEC(c) })).filter(g=>g.ds.length);
+  const fk = $('ve-group').value;
+  return VE_FIELDS[fk].roster().map(v => ({ name:v, ds:distsWith(fk, v) })).filter(g=>g.ds.length);
 }
 function buildVEPicker(){
   multiSelect('ve-ms-groups', 'Groups',
@@ -1429,7 +1502,8 @@ function renderVE(){
   const base=+$('ve-base').value, cat=+$('ve-cat').value, mk=$('ve-metric').value;
   const M=METRICS[mk], bk=$('ve-band').value;
   const groups = veGroups(), all = veAllGroups();
-  const kindLabel = $('ve-group').value === 'reads' ? 'PL provider' : 'curriculum';
+  const fk = $('ve-group').value, kindLabel = VE_FIELDS[fk].label.toLowerCase();
+  const bandMismatch = bk !== VE_FIELDS[fk].band;
   const unit = mk==='mean' ? '' : 'pp';
 
   const rows = groups.map(g => {
@@ -1475,7 +1549,7 @@ function renderVE(){
     const cur = agg('dist', g.ds, bk, 2026, cat), bse = agg('dist', g.ds, bk, base, cat);
     return { ...g, cur, bse, d: cur && bse ? M.get(cur)-M.get(bse) : null, shown: groups.some(x=>x.name===g.name) };
   }).filter(r=>r.cur).sort((a,b)=>(M.get(b.cur)-M.get(a.cur))*M.good);
-  const head = `<thead><tr><th class="nos">${$('ve-group').value==='reads'?'PL provider':'Curriculum'}</th>
+  const head = `<thead><tr><th class="nos">${esc(VE_FIELDS[fk].label)}</th>
     <th class="nos">Districts</th><th class="nos">Tested 2026</th>`
     + MODERN.map(y=>`<th class="nos">${y}</th>`).join('')
     + `<th class="nos">Δ ${base}→2026</th></tr></thead>`;
@@ -1497,17 +1571,18 @@ function renderVE(){
       + `Groups differ far more in where they started than in how they moved, which is what you would expect when districts were not assigned to ${kindLabel}s for comparison.`
       + anomaly
     : 'No group passes the current filters.';
-  $('ve-overlap').innerHTML = $('ve-group').value === 'reads' && ALL_DIST.some(i => readsNames(i).length > 1)
-    ? `<div class="note warn" style="margin-bottom:18px"><b>Districts can appear in more than one provider group.</b> Several districts work with two Reads providers, so the provider groups overlap and do not partition the city. A district with two providers is counted in both, and the group totals therefore sum to more than the citywide total.</div>`
+  $('ve-overlap').innerHTML = bandMismatch
+    ? `<div class="note warn" style="margin-bottom:18px"><b>The grade band does not match the grouping.</b> ${esc(VE_FIELDS[fk].label)} applies to ${fk.startsWith('k5') ? 'grades 3 to 5' : 'grades 6 to 8'}, but the results shown are for ${esc(band(bk).label.toLowerCase())}. Grades outside that range were not touched by this assignment.</div>`
     : '';
 }
 function csvVE(){
   const base=+$('ve-base').value, cat=+$('ve-cat').value, bk=$('ve-band').value;
-  const kind = $('ve-group').value==='reads' ? 'Reads PL provider' : 'Elementary curriculum';
+  const kind = VE_FIELDS[$('ve-group').value].label;
   const out=[['NYC Reads ELA Explorer — providers and curriculum'],
     ['Grouped by',kind],['Grades',band(bk).label],['Student group',CATS[cat]],
     ['Baseline',base],['Generated',BUILD],
-    ['Note','Group aggregates sum student counts across districts. Districts with two Reads providers appear in both groups.'],[],
+    ['Source','Curriculum and JESP assignments for school year 2025-26, the year the spring 2026 test measures'],
+    ['Note','Group aggregates sum student counts across districts.'],[],
     [kind,'Districts','Which districts','Year','Students tested','% Level 1','% Level 3+4','Mean scale score']];
   for (const g of veGroups()) for (const y of MODERN){
     const a=agg('dist',g.ds,bk,y,cat);

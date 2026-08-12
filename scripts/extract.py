@@ -156,78 +156,57 @@ def pack(rows, geo_index):
 
 
 def read_vendors(base):
-    """District -> vendor / curriculum record. Personal columns are never read."""
-    import re
-    path = os.path.join(base, VENDOR_SRC)
+    """District -> provider / curriculum for SY 2025-26.
+
+    Source: the curriculum-and-JESP chart supplied by the team on 11 Aug 2026,
+    transcribed into data/vendors_sy2025_26.json. That is the school year the
+    spring 2026 test measures, so it is the correct vintage for these results;
+    the 2026-27 draft workbook describes assignments that begin AFTER the 2026
+    test and is no longer used for provider or curriculum.
+
+    JESP is the job-embedded support provider, i.e. the professional learning
+    vendor. K-5 and grades 6-8 are held separately because they differ.
+
+    The chart also carries a Phase column. It disagrees with the NYCPS launch
+    timeline for seven districts, and the timeline is corroborated by the
+    "year joined" columns of the 2026-27 workbook for all 32, so the phase
+    assignments are NOT taken from the chart. The disagreement is carried into
+    the payload so the dashboard can show it rather than hide it.
+    """
+    path = os.path.join(base, 'vendors_sy2025_26.json')
     if not os.path.exists(path):
-        print('WARNING: vendor source not found, vendor page will be empty')
+        print('WARNING: vendor source not found, provider page will be empty')
         return None
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    ws = wb[VENDOR_SHEET]
-    rows = list(ws.iter_rows(values_only=True))
-    hdr = [('' if c is None else str(c)).strip() for c in rows[1]]
-    H = {h: i for i, h in enumerate(hdr)}
-    join_e = [k for k in hdr if k.startswith('NYC Reads Year Joined') and 'Elementary' in k][0]
-    join_m = 'NYC Reads Year Joined Middle School'
+    with open(path) as f:
+        src = json.load(f)
+    recs = src['districts']
+    assert len(recs) == 32, 'expected 32 districts, got %d' % len(recs)
 
-    def cell(r, k):
-        v = r[H[k]]
-        return '' if v is None else str(v).strip()
+    def roster(key):
+        return sorted({recs[str(d)][key] for d in range(1, 33) if recs[str(d)][key]})
+    kj, kc = roster('k5Jesp'), roster('k5Curr')
+    mj, mc = roster('msJesp'), roster('msCurr')
 
-    recs = {}
-    for r in rows[2:]:
-        if not r or not r[0]:
-            continue
-        m = re.fullmatch(r'District\s+(\d+)', str(r[0]).strip())
-        if not m:
-            continue                       # high-school networks: not in the ELA files
-        n = int(m.group(1))
-        if not 1 <= n <= 32:
-            continue                       # District 75 is not reported in the district file
-        recs[n] = {
-            'reads':  [x.strip() for x in cell(r, 'Reads Vendor').split(',') if x.strip()],
-            'solves': cell(r, 'Solves Vendor'),
-            'ec':     cell(r, 'NYC Reads Elementary Curriculum'),
-            'mc':     cell(r, 'NYC Reads MS Curriculum'),
-            'sc':     cell(r, 'NYC Solves Curriculum'),
-            'je':     cell(r, join_e),
-            'jm':     cell(r, join_m),
-        }
+    def idx(r, v):
+        return r.index(v) if v else None
+    by = [{'kj': idx(kj, recs[str(d)]['k5Jesp']), 'kc': idx(kc, recs[str(d)]['k5Curr']),
+           'mj': idx(mj, recs[str(d)]['msJesp']), 'mc': idx(mc, recs[str(d)]['msCurr'])}
+          for d in range(1, 33)]
 
-    # the year-joined columns must agree with the phase lists already in the tool
-    exp_e = {**{d: 'SY23-24' for d in PHASE['elem1']}, **{d: 'SY24-25' for d in PHASE['elem2']}}
-    exp_m = {**{d: 'SY25-26' for d in PHASE['ms1']},   **{d: 'SY26-27' for d in PHASE['ms2']}}
-    for n, v in recs.items():
-        assert v['je'] == exp_e.get(n, ''), ('elem year mismatch', n, v['je'], exp_e.get(n))
-        assert v['jm'] == exp_m.get(n, ''), ('MS year mismatch', n, v['jm'], exp_m.get(n))
-    assert len(recs) == 32, 'expected all 32 districts, got %d' % len(recs)
+    official = {**{d: 1 for d in PHASE['elem1']}, **{d: 2 for d in PHASE['elem2']}}
+    chart = {int(k): v for k, v in src['_phaseInChart'].items()}
+    disagree = [{'d': d, 'timeline': official[d], 'chart': chart[d]}
+                for d in range(1, 33) if official[d] != chart[d]]
 
-    # rosters, from the districts actually present
-    reads_roster  = sorted({x for v in recs.values() for x in v['reads']})
-    solves_roster = sorted({v['solves'] for v in recs.values() if v['solves']})
-    ec_roster     = sorted({v['ec'] for v in recs.values() if v['ec']})
-    mc_roster     = sorted({v['mc'] for v in recs.values() if v['mc']})
-
-    by = []
-    for n in range(1, 33):
-        v = recs[n]
-        by.append({
-            'r':  [reads_roster.index(x) for x in v['reads']],
-            's':  solves_roster.index(v['solves']) if v['solves'] else None,
-            'ec': ec_roster.index(v['ec']) if v['ec'] else None,
-            'mc': mc_roster.index(v['mc']) if v['mc'] else None,
-            'sc': v['sc'],
-        })
-    payload = {'readsRoster': reads_roster, 'solvesRoster': solves_roster,
-               'ecRoster': ec_roster, 'mcRoster': mc_roster, 'byDistrict': by}
-    # belt and braces: no personal data may appear anywhere in the emitted blob
+    payload = {'source': 'SY 2025-26',
+               'k5JespRoster': kj, 'k5CurrRoster': kc,
+               'msJespRoster': mj, 'msCurrRoster': mc,
+               'byDistrict': by, 'phaseDisagree': disagree}
     blob = json.dumps(payload)
     assert '@' not in blob, 'an email address reached the vendor payload'
-    for c in BANNED_COLS:
-        assert c.lower() not in blob.lower(), 'a personal column reached the payload: ' + c
-    print('vendors: %d reads vendors, %d solves vendors, %d elem curricula; '
-          'year-joined agrees with phase lists for all 32 districts'
-          % (len(reads_roster), len(solves_roster), len(ec_roster)))
+    print('vendors (SY2025-26): %d K-5 providers, %d K-5 curricula, %d grades 6-8 providers; '
+          'phase column disagrees with the launch timeline for %d districts'
+          % (len(kj), len(kc), len(mj), len(disagree)))
     return payload
 
 

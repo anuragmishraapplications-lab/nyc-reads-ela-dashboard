@@ -237,17 +237,21 @@ for i,d in enumerate(DISTRICTS):
     # cols: 0 District 1 Borough 2 ElemPhase 3 MSPhase 4 ReadsPL 5 ElemCurr
     #       6 MSCurr 7 SolvesPL 8 Tested 9-13 %L1..%L3+4 14 mean
     #       15 TestedBase 16 %L1Base 17 %ProfBase 18 dL1 19 dProf 20 Signal
+    # 0 District 1 Borough 2 ElemPhase 3 MSPhase 4 K5prov 5 K5curr 6 MSprov
+    # 7 MScurr 8 Tested 9 dTested% 10-14 %L1..%L3+4 15 mean 16 TestedBase
+    # 17 %L1Base 18 %ProfBase 19 dL1 20 dProf 21 Signal
     cmp(f'csv di n {d}', str(r[8]), str(cur['n']))
+    cmp(f'csv di dn {d}', r[9], f'{(cur["n"]-bse["n"])/bse["n"]*100:.2f}')
     for j,k in enumerate(['l1','l2','l3','l4','prof']):
-        cmp(f'csv di {k} {d}', r[9+j], f2(cur[k]))
-    cmp(f'csv di mean {d}', r[14], f1(cur['mean']))
-    cmp(f'csv di nbase {d}', str(r[15]), str(bse['n']))
-    cmp(f'csv di l1base {d}', r[16], f2(bse['l1']))
-    cmp(f'csv di profbase {d}', r[17], f2(bse['prof']))
-    cmp(f'csv di dl1 {d}', r[18], f'{cur["l1"]-bse["l1"]:.2f}')
-    cmp(f'csv di dprof {d}', r[19], f'{cur["prof"]-bse["prof"]:.2f}')
+        cmp(f'csv di {k} {d}', r[10+j], f2(cur[k]))
+    cmp(f'csv di mean {d}', r[15], f1(cur['mean']))
+    cmp(f'csv di nbase {d}', str(r[16]), str(bse['n']))
+    cmp(f'csv di l1base {d}', r[17], f2(bse['l1']))
+    cmp(f'csv di profbase {d}', r[18], f2(bse['prof']))
+    cmp(f'csv di dl1 {d}', r[19], f'{cur["l1"]-bse["l1"]:.2f}')
+    cmp(f'csv di dprof {d}', r[20], f'{cur["prof"]-bse["prof"]:.2f}')
     dl1=cur['l1']-bse['l1']; dpr=cur['prof']-bse['prof']
-    cmp(f'csv di sig {d}', r[20],
+    cmp(f'csv di sig {d}', r[21],
         'Improved on both' if dl1<0 and dpr>0 else 'Mixed' if dl1<0 or dpr>0 else 'Worse on both')
 
 # bo CSV: grades 3-5

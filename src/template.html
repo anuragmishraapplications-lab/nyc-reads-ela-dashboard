@@ -288,6 +288,14 @@ dl.defs dd{margin-left:0;color:#41505C}
     </div>
   </div>
 
+  <div class="cd" id="di-cohort-wrap">
+    <div class="cdh"><div><div class="ct">Change in cohort size against change in proficiency</div>
+      <div class="cs">Horizontal axis: the change in how many students sat the test. Vertical axis: the change in proficiency. Coloured by borough.</div></div>
+      <button class="btn gh" data-png="di-cohort">PNG</button></div>
+    <div class="cc" id="wrap-di-cohort"><canvas id="di-cohort"></canvas></div>
+    <div class="note warn" id="di-cohort-note" style="margin:16px 0 0"></div>
+  </div>
+
   <div class="cd">
     <div class="cdh"><div><div class="ct">District results, 2026, and change from baseline</div>
       <div class="cs" id="di-tblsub"></div></div></div>
@@ -425,20 +433,22 @@ dl.defs dd{margin-left:0;color:#41505C}
   <div class="ph"><div>
     <div class="eyebrow">Implementation partners</div>
     <div class="pt">Professional learning providers and curriculum</div>
-    <div class="pst">Districts grouped by the NYC Reads professional learning provider they work with and by the elementary curriculum they adopted, with ELA results for each group.</div>
+    <div class="pst">Districts grouped by the NYC Reads professional learning provider (JESP) they worked with and by the curriculum they adopted in <b>school year 2025&ndash;26</b>, the year the spring 2026 test measures. K&ndash;5 and grades 6&ndash;8 assignments are held separately because they differ.</div>
   </div></div>
+
+  <div id="ve-phasenote"></div>
 
   <div class="note warn"><b>These groups were not formed for comparison.</b> Districts were not assigned to providers or curricula at random and did not start from the same place, group sizes are very uneven, and several districts work with more than one provider. Differences between groups describe the districts in them; they do not measure provider or curriculum effectiveness.</div>
 
   <div class="g2">
     <div class="cd">
-      <div class="cdh"><div><div class="ct">Districts by NYC Reads professional learning provider</div>
-        <div class="cs">Every provider named in the source, with the community school districts assigned to it.</div></div></div>
+      <div class="cdh"><div><div class="ct">Districts by K&ndash;5 professional learning provider</div>
+        <div class="cs">Every JESP named in the supplied SY 2025&ndash;26 chart, with the community school districts assigned to it.</div></div></div>
       <div class="tw"><table id="ve-roster"></table></div>
     </div>
     <div class="cd">
-      <div class="cdh"><div><div class="ct">Districts by adopted elementary curriculum</div>
-        <div class="cs">The K&ndash;5 curriculum each district adopted under NYC Reads.</div></div></div>
+      <div class="cdh"><div><div class="ct">Districts by adopted K&ndash;5 curriculum</div>
+        <div class="cs">The K&ndash;5 curriculum each district was using in SY 2025&ndash;26.</div></div></div>
       <div class="tw"><table id="ve-roster2"></table></div>
     </div>
   </div>

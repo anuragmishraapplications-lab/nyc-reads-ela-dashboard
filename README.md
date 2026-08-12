@@ -70,8 +70,8 @@ python3 scripts/audit_pass2.py    # 4,030 chart, table and CSV values
 | `audit_raw.py` | Internal consistency of all 30,728 source rows | counts sum to tested; `%` = count/tested; `L3+4 = L3+L4`; max deviation 5.7e-6 pp |
 | `audit_engine.py` | Every level × geography × grade band × year × student group = **40,698** combinations pulled out of the live page | **0 mismatches.** Max deviation 5e-7 pp on percentages, 9.8e-7 on mean scale score. Also cross-checks all 28,523 cells against the files' own published `%` columns (agreement to 4.3e-6 pp, the source's float precision). |
 | `audit_digest.py` | All **40,698** combinations again, by SHA-256 over the aggregated student counts. Exact integer comparison, no dependence on decimal formatting | **identical hash** |
-| `audit_render.py` | **8,836** values actually rendered — KPI cards, chart datapoints, table cells, signs and directions of every change — across 122 filter states | **0 mismatches** |
-| `audit_pass2.py` | **4,030** more: the diverging grade chart, the 2022 reference chart, the district scatter and ranked bars, the borough matrix and district bars, the phase contrast table, the gap chart, the per-grade format table, and all six **CSV exports in full** | **0 mismatches** |
+| `audit_render.py` | **9,560** values actually rendered — KPI cards, chart datapoints, table cells, signs and directions of every change — across 130 filter states | **0 mismatches** |
+| `audit_pass2.py` | **4,062** more: the diverging grade chart, the 2022 reference chart, the district scatter and ranked bars, the borough matrix and district bars, the phase contrast table, the gap chart, the per-grade format table, and all six **CSV exports in full** | **0 mismatches** |
 
 Claims in the team's working doc were reproduced exactly: citywide Level 1 26.1% → 24.3%
 (2024→2026); 27 of 32 districts down on Level 1; largest falls in Districts 23, 7, 16
@@ -98,20 +98,36 @@ and 5; and 23, 16, 5 confirmed as Elementary Phase 1.
   size — so the elementary contrast is not distinguishable from a general difference
   between those sets of districts. That is reported as found.
 
-## Vendor and curriculum data
+## Provider and curriculum data
 
-Provider and curriculum assignments come from `2026-27 District Reads Solves Data
-(Draft).xlsx`, sheet "District Sustainability Conditi".
+Assignments are for **school year 2025-26**, the year the spring 2026 test measures,
+transcribed from the curriculum-and-JESP chart the team supplied on 11 Aug 2026 into
+`data/vendors_sy2025_26.json`. JESP is the job-embedded support provider, i.e. the
+professional learning vendor. K-5 and grades 6-8 are held separately because they differ.
 
-**Only the vendor, curriculum and year-joined columns are read.** That sheet also carries
-superintendent and deputy names, 94 individual email addresses, and internal
-district-condition narrative. None of it is loaded, `extract.py` asserts that no `@` and
-no personal column name can reach the payload, and the source workbook is kept out of
-version control (`data/private/`, gitignored) because the published dashboard is public.
+The 2026-27 draft workbook is no longer used for provider or curriculum: those
+assignments begin *after* the 2026 test, and they differ from SY2025-26 for 21 of the 32
+districts. That workbook also carried superintendent names and 94 email addresses, so it
+was never committed; `extract.py` still asserts that no `@` can reach the payload.
 
-The sheet's "year joined" columns were checked against the NYC Reads phase lists already
-in the tool and agree for **all 32 districts**, which is an independent confirmation of
-the phase assignments.
+**Unresolved:** the supplied chart's own Phase column disagrees with the NYC Reads launch
+timeline for seven districts (10, 13, 14, 24, 28, 29, 30). The tool keeps the launch
+timeline, because it is independently corroborated by the "year joined" columns of the
+2026-27 workbook for all 32 districts. The disagreement is displayed on the providers
+page rather than hidden.
+
+## Cohort size
+
+The number of students tested is not stable. Between 2024 and 2026 the district totals
+fell 2.6%, but individual districts range from -15.4% (D05) to +10.0% (D14). Because a
+district's result is a percentage of whoever sat the test, that is a competing
+explanation for a measured gain, and it is not a small one: the change in cohort size
+correlates with the change in proficiency at **r = -0.48** and with the change in the
+Level 1 share at **r = +0.60**. The 14 districts whose cohort shrank by more than 5%
+averaged +4.2pp on proficiency against +0.4pp for those that held steady or grew.
+
+The district explorer carries a "Δ tested %" column and a dedicated panel plotting cohort
+change against proficiency change, so the two are read together.
 
 ## Not included
 

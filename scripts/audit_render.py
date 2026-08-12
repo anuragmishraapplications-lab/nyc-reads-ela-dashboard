@@ -112,20 +112,22 @@ for e in REN:
             n=int(d)
             cmp(f'di elem {d}', row[2], 'Elem Phase 1' if n in PHASE['elem1'] else 'Elem Phase 2' if n in PHASE['elem2'] else '—')
             cmp(f'di ms {d}', row[3], 'MS Phase 1' if n in PHASE['ms1'] else 'MS Phase 2' if n in PHASE['ms2'] else '—')
-            # columns: 0 name 1 boro 2 elem 3 ms 4 readsPL 5 elemCurr 6 tested
-            #          7 %L3-4 8 dL3-4 9 %L1 10 dL1 11 %L4 12 mean 13 signal
+            # 0 name 1 boro 2 elem 3 ms 4 k5prov 5 k5curr 6 tested 7 dTested%
+            # 8 %L3-4 9 dL3-4 10 %L1 11 dL1 12 %L4 13 mean 14 signal
             cmp(f'di n {d} {e["st"]}', row[6], numf(cur['n']) if cur else 's')
-            cmp(f'di prof {d} {e["st"]}', row[7], f1(cur['prof']) if cur else 's')
-            cmp(f'di dprof {d} {e["st"]}', row[8], ppf(cur['prof']-bse['prof']) if cur and bse else 's')
-            cmp(f'di l1 {d} {e["st"]}', row[9], f1(cur['l1']) if cur else 's')
-            cmp(f'di dl1 {d} {e["st"]}', row[10], ppf(cur['l1']-bse['l1']) if cur and bse else 's')
-            cmp(f'di l4 {d} {e["st"]}', row[11], f1(cur['l4']) if cur else 's')
-            cmp(f'di mean {d} {e["st"]}', row[12], f1(cur['mean']) if cur else 's')
+            dn = (cur['n']-bse['n'])/bse['n']*100 if cur and bse and bse['n'] else None
+            cmp(f'di dn {d} {e["st"]}', row[7], ppf(dn) if dn is not None else 's')
+            cmp(f'di prof {d} {e["st"]}', row[8], f1(cur['prof']) if cur else 's')
+            cmp(f'di dprof {d} {e["st"]}', row[9], ppf(cur['prof']-bse['prof']) if cur and bse else 's')
+            cmp(f'di l1 {d} {e["st"]}', row[10], f1(cur['l1']) if cur else 's')
+            cmp(f'di dl1 {d} {e["st"]}', row[11], ppf(cur['l1']-bse['l1']) if cur and bse else 's')
+            cmp(f'di l4 {d} {e["st"]}', row[12], f1(cur['l4']) if cur else 's')
+            cmp(f'di mean {d} {e["st"]}', row[13], f1(cur['mean']) if cur else 's')
             if cur and bse:
                 dl1=cur['l1']-bse['l1']; dpr=cur['prof']-bse['prof']
                 sig='Improved on both' if dl1<0 and dpr>0 else 'Mixed' if dl1<0 or dpr>0 else 'Worse on both'
             else: sig='—'
-            cmp(f'di sig {d} {e["st"]}', row[13], sig)
+            cmp(f'di sig {d} {e["st"]}', row[14], sig)
     elif p=='bo':
         base,bk,m=e['st']; key=MET[m]
         for bi,b in enumerate(BOROS):
@@ -183,18 +185,16 @@ for e in REN:
                 cmp(f'tf trend {gk} {y} {m}', e['trend'][gi]['v'][yi], val, 1e-5)
 
     elif p=='ve':
-        grp,bk,mk,minsize=e['st']; key=MET[mk]; base=2024
+        fk,bk,mk,minsize=e['st']; key=MET[mk]; base=2024
         VEND=json.load(open(os.path.join(R,'data/payload.json')))['vendors']
-        if grp=='reads':
-            groups=[(v,[i for i in range(32) if VEND['readsRoster'].index(v) in VEND['byDistrict'][i]['r']])
-                    for v in VEND['readsRoster']]
-        else:
-            groups=[(c,[i for i in range(32) if VEND['byDistrict'][i]['ec'] is not None
-                        and VEND['ecRoster'][VEND['byDistrict'][i]['ec']]==c])
-                    for c in VEND['ecRoster']]
+        FIELD={'k5j':('k5JespRoster','kj'), 'k5c':('k5CurrRoster','kc'),
+               'msj':('msJespRoster','mj'), 'msc':('msCurrRoster','mc')}
+        rosterKey, fieldKey = FIELD[fk]
+        roster=VEND[rosterKey]
+        groups=[(v,[i for i in range(32) if VEND['byDistrict'][i][fieldKey] is not None
+                    and roster[VEND['byDistrict'][i][fieldKey]]==v]) for v in roster]
         groups=[(n,ds) for n,ds in groups if ds]
         good={'prof':1,'l1':-1,'l4':1,'mean':1}[mk]
-        # charted groups: size threshold, ranked by the 2026 LEVEL
         charted=[]
         for n,ds in groups:
             if len(ds) < int(minsize): continue
@@ -202,13 +202,11 @@ for e in REN:
             cur=A('dist',gids,bk,2026,0); bse=A('dist',gids,bk,base,0)
             if cur and bse: charted.append((n,ds,gids,cur,bse))
         charted.sort(key=lambda r:-r[3][key]*good)
-        cmp(f've-slope labels {e["st"]}', e['slab'],
-            [f'{n} ({len(ds)})' for n,ds,_,_,_ in charted])
+        cmp(f've-slope labels {e["st"]}', e['slab'], [f'{n} ({len(ds)})' for n,ds,_,_,_ in charted])
         for i,(n,ds,gids,cur,bse) in enumerate(charted):
             pair=e['slope'][0]['v'][i]
             cmp(f've-slope from {n} {e["st"]}', pair[0], bse[key], 1e-5)
             cmp(f've-slope to {n} {e["st"]}',   pair[1], cur[key], 1e-5)
-        # the table carries EVERY group, ranked by level
         allrows=[]
         for n,ds in groups:
             gids=['%02d'%(i+1) for i in ds]
@@ -223,8 +221,7 @@ for e in REN:
             for yi,y in enumerate(MODERN):
                 a=A('dist',gids,bk,y,0)
                 cmp(f've-tbl {n} {y} {e["st"]}', trow[3+yi], f1(a[key]) if a else 's')
-            cmp(f've-tbl d {n} {e["st"]}', trow[7],
-                ppf(cur[key]-bse[key]) if bse else 's')
+            cmp(f've-tbl d {n} {e["st"]}', trow[7], ppf(cur[key]-bse[key]) if bse else 's')
 
 print('='*72); print('RENDER AUDIT — values shown on the page vs independent recomputation'); print('='*72)
 print(f'rendered values checked : {checked:,}')
