@@ -19,7 +19,7 @@ body{background:var(--paper);color:var(--ink);font-family:Hind,sans-serif;line-h
 /* ---------- sidebar ---------- */
 .sb{position:fixed;top:0;left:0;width:var(--sw);height:100vh;background:var(--navy);color:#fff;z-index:100;display:flex;flex-direction:column;overflow-y:auto}
 .sb-h{padding:22px 18px 16px;border-bottom:1px solid rgba(255,255,255,.13)}
-.sb-h img{max-width:170px;height:auto;display:block;background:#fff;padding:7px 9px;border-radius:6px}
+.sb-h img{max-width:186px;height:auto;display:block;background:#fff;padding:10px 12px;border-radius:8px}
 .sb-h h2{font-family:'Crimson Text',serif;font-size:16px;font-weight:700;margin-top:13px;line-height:1.2}
 .sb-h span{font-size:10.5px;color:rgba(255,255,255,.55);letter-spacing:.05em}
 .ns{padding:14px 11px 6px}
@@ -28,7 +28,10 @@ body{background:var(--paper);color:var(--ink);font-family:Hind,sans-serif;line-h
 .ni:hover{background:rgba(255,255,255,.09);color:#fff}
 .ni.ac{background:var(--c2);color:#0C2038;font-weight:700}
 .ni svg{width:17px;height:17px;flex-shrink:0}
-.sb-f{margin-top:auto;padding:16px 18px 20px;border-top:1px solid rgba(255,255,255,.13);font-size:10px;color:rgba(255,255,255,.45);line-height:1.6}
+.sb-f{margin-top:auto;padding:18px 18px 20px;border-top:1px solid rgba(255,255,255,.13);font-size:10px;color:rgba(255,255,255,.45);line-height:1.6}
+.sb-f .cprl-mark{width:100%;max-width:186px;height:auto;display:block;background:#fff;padding:9px 11px;border-radius:8px;margin-bottom:10px}
+.sb-f .sb-by{display:block;font-size:10px;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:6px}
+.sb-f #buildstamp{display:block;font-size:9.5px;color:rgba(255,255,255,.38)}
 .sb-f b{color:rgba(255,255,255,.8);font-weight:600}
 
 /* ---------- layout ---------- */
@@ -100,7 +103,12 @@ td.nm{font-weight:600}
 .chip{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:#EEF3F8;color:var(--navy);display:inline-block;margin:2px 3px 2px 0;border:1px solid #DCE7F0}
 .sup{color:#B08A2E;font-weight:700}
 .muted{color:var(--muted)}
-.foot{color:var(--muted);font-size:11.5px;margin-top:26px;border-top:1px solid var(--line);padding-top:16px;line-height:1.7}
+.foot{color:var(--muted);font-size:11.5px;margin-top:18px;padding-top:14px;line-height:1.7}
+.sources{margin-top:30px;border-top:2px solid var(--ink);padding-top:18px}
+.sources h4{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--accent);font-weight:700;margin-bottom:10px}
+.sources ol{margin:0 0 0 17px;font-size:12px;color:#41505C;line-height:1.75}
+.sources li{margin-bottom:5px}
+.sources .pending{background:#FFF8EC;border:1px solid #F2DFB8;color:#7A5310;border-radius:7px;padding:9px 13px;font-size:11.5px;margin-top:11px;line-height:1.6}
 h3.sec{font-family:'Crimson Text',serif;font-size:17px;font-weight:600;margin:22px 0 9px}
 h3.sec:first-child{margin-top:0}
 dl.defs{font-size:12.5px;line-height:1.65}
@@ -156,9 +164,9 @@ dl.defs dd{margin-left:0;color:#41505C}
 
 <nav class="sb">
   <div class="sb-h">
-    <img src="__LOGO__" alt="Center for Public Research and Leadership">
-    <h2>NYC Reads</h2>
-    <span>ELA Results Explorer &middot; Grades 3&ndash;8</span>
+    <img src="__LOGO_NYCREADS__" alt="NYC Reads Together">
+    <h2>ELA Results Explorer</h2>
+    <span>Grades 3&ndash;8 &middot; 2023 to 2026</span>
   </div>
   <div class="ns">
     <div class="nl">Results</div>
@@ -172,7 +180,8 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="ni" data-p="tf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>Test format</div>
   </div>
   <div class="sb-f">
-    <b>Source:</b> NYCPS public ELA results, 2018&ndash;2026 (as of 3&nbsp;Aug&nbsp;2026).<br>
+    <img class="cprl-mark" src="__LOGO_CPRL__" alt="Center for Public Research and Leadership">
+    <span class="sb-by">Prepared by the Center for Public Research and Leadership</span>
     <span id="buildstamp"></span>
   </div>
 </nav>
@@ -583,6 +592,7 @@ dl.defs dd{margin-left:0;color:#41505C}
   </div>
 </section>
 
+<div class="sources" id="sources"></div>
 <div class="foot" id="foot"></div>
 </main>
 

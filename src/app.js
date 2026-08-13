@@ -1631,13 +1631,32 @@ initOV(); initDI(); initBO(); initPH(); initVE(); initSG(); initTF();
 renderOV(); drawn.add('ov');
 
 $('buildstamp').textContent = `Built ${BUILD}.`;
-$('foot').innerHTML = `<b>NYC Reads &mdash; ELA Results Explorer.</b> Built for the Center for Public Research and Leadership from the NYCPS public ELA results files for grades 3&ndash;8 (citywide, borough and district), dated 3&nbsp;August&nbsp;2026, together with the NYCPS NYC Reads launch timeline. `
+/* ---------------------------------------------------------------------
+   Sources. Numbered so they can be cited directly, and kept in one place so
+   the wording can be replaced without touching anything else.
+   The provider and curriculum line is marked pending until NYCPS confirms it
+   may be shared; VENDOR_APPROVED flips that.
+   --------------------------------------------------------------------- */
+const VENDOR_APPROVED = false;
+$('sources').innerHTML = `<h4>Sources</h4><ol>
+  <li><b>ELA results, grades 3 to 8, 2018 to 2026.</b> New York City Public Schools,
+      public ELA results files (citywide, borough and district), published on the NYCPS
+      InfoHub. File date 3&nbsp;August&nbsp;2026.</li>
+  <li><b>NYC Reads launch phases by district.</b> New York City Public Schools, NYC Reads
+      programme information.</li>
+  <li><b>Curriculum and professional learning provider by district, school year
+      2025&ndash;26.</b> New York City Public Schools.</li>
+</ol>`
++ (VENDOR_APPROVED ? '' :
+   `<div class="pending"><b>Pending confirmation.</b> Source 3 is shown while approval to
+    share the district-level curriculum and provider assignments is confirmed with NYCPS.
+    Wording to be finalised before wider circulation.</div>`);
+
+$('foot').innerHTML = `<b>NYC Reads &mdash; ELA Results Explorer.</b> Prepared by the Center for Public Research and Leadership. `
   + `Percentages are computed from student counts rather than copied from the published percentage columns; grade bands and district groups are aggregated by summing counts. `
-  + `Changes are differences in percentage points and are never taken across the 2023 standards change. `
-  + `Mathematics, Science, charter schools and school-level results are out of scope, and no professional-learning provider or curriculum field was available. `
-  + `NYSED re-aligned the ELA test to new standards in 2023, so 2022 and earlier are shown for reference only and are never differenced against later years. `
+  + `Changes are differences in percentage points. NYSED re-aligned the ELA test to new standards in 2023, so 2022 and earlier are shown for reference only and are never differenced against later years. `
   + `The citywide, borough and district files are compiled on different rules and do not sum to one another, so each level is read only from its own file. `
-  + `Suppressed groups are omitted rather than treated as zero. Build ${BUILD}.`;
+  + `Suppressed groups are omitted rather than treated as zero. Mathematics, Science, charter schools and school-level results are out of scope. Build ${BUILD}.`;
 
 const hash = location.hash.replace('#','');
 if (RENDER[hash]) show(hash);
