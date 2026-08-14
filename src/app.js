@@ -9,7 +9,9 @@
 
 const YEARS   = D.years;                 // [2018,2019,2022,2023,2024,2025,2026]
 const GRADES  = D.grades;                // ['3'..'8','All Grades']
-const CATS    = D.cats;
+const CATS    = D.cats;                      // the file's exact Category strings
+const CATL    = D.catLabels || D.cats;       // how those groups are named on screen
+const catName = c => CATL[c] || CATS[c];
 const AGI     = GRADES.indexOf('All Grades');
 const ALLCAT  = CATS.indexOf('All Students');
 const MODERN  = [2023, 2024, 2025, 2026];      // comparable era (current standards)
@@ -124,6 +126,7 @@ const distIdx  = n => D.districts.indexOf(String(n).padStart(2,'0'));
    provider and adopted curriculum, by district). No personal data is
    carried in the payload.
    --------------------------------------------------------------------- */
+const HAS_VENDORS = !!D.vendors;
 const V = D.vendors || { k5JespRoster:[], k5CurrRoster:[], msJespRoster:[], msCurrRoster:[],
                          byDistrict:[], phaseDisagree:[], source:'' };
 const vendorOf = i => V.byDistrict[i] || { kj:null, kc:null, mj:null, mc:null };
@@ -146,8 +149,9 @@ const distsWith = (fk, v) => ALL_DIST.filter(i => VE_FIELDS[fk].get(i) === v);
    its provider reach tested grades 3 to 5; the middle-school rollout reaches
    grades 6 to 8. A district can have one provider for K-5 and another for
    6-8, so a filter or a column that always reads the K-5 field is wrong for
-   the middle grades. D03 is the case that found this: Teaching Matters is its
-   grades 6-8 provider and does not appear in its K-5 assignment at all.
+   the middle grades. One district surfaced this in review: its middle-grade
+   provider does not appear in its K-5 assignment at all, so filtering the
+   middle grades by that provider wrongly returned nothing.
    --------------------------------------------------------------------- */
 const BAND_SCOPE = { all:'both', '35':'k5', g3:'k5', g4:'k5', g5:'k5',
                      '68':'ms',  g6:'ms', g7:'ms', g8:'ms' };
@@ -194,21 +198,22 @@ const pp = v => v==null || !isFinite(v) ? '—'
 const num = v => v==null ? '—' : v.toLocaleString('en-US');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-/* diverging colour ramp; `good` = sign that means improvement */
+/* diverging color ramp; `good` = sign that means improvement */
 function heat(v, scale, good){
   if (v==null || !isFinite(v)) return 'background:#F3F4F6;color:#9CA3AF';
   if (good === 0){          /* magnitude only: neither direction is "better" */
     const t = Math.min(1, Math.abs(v)/scale);
     if (t < 0.06) return 'background:#F1F4F7;color:#41505C';
     const a = 0.12 + t*0.6;
-    return `background:rgba(109,52,95,${a.toFixed(3)});color:${a>0.45?'#fff':'#43213B'}`;
+    return `background:rgba(90,98,112,${a.toFixed(3)});color:${a>0.45?'#fff':'#33393F'}`;
   }
   const t = Math.max(-1, Math.min(1, (v*good)/scale));         // +1 = best
   if (Math.abs(t) < 0.06) return 'background:#F1F4F7;color:#41505C';
   const a = Math.min(0.88, 0.16 + Math.abs(t)*0.72);
+  /* purple = moved in the direction of improvement, orange = moved against it */
   return t > 0
-    ? `background:rgba(15,123,108,${a.toFixed(3)});color:${a>0.5?'#fff':'#0B4F46'}`
-    : `background:rgba(179,56,44,${a.toFixed(3)});color:${a>0.5?'#fff':'#7A2018'}`;
+    ? `background:rgba(106,61,138,${a.toFixed(3)});color:${a>0.5?'#fff':'#3F2454'}`
+    : `background:rgba(214,124,32,${a.toFixed(3)});color:${a>0.5?'#fff':'#7A4408'}`;
 }
 /* level-shading ramp (single hue, higher = darker) */
 function shade(v, lo, hi, hue){
@@ -219,22 +224,25 @@ function shade(v, lo, hi, hue){
 }
 
 /* ---------------------------------------------------------------------
-   Colour.
+   Color.
 
-   Five colours are reserved and mean one thing throughout:
+   Five colors are reserved and mean one thing throughout:
      proficiency (Level 3-4)  CPRL blue
      Level 1 / Level 2 / Level 3 / Level 4  the performance ramp
 
    Everything categorical (borough, phase, provider, curriculum, student
-   group) draws from CAT, which contains none of the reserved five. A colour
+   group) draws from CAT, which contains none of the reserved five. A color
    therefore never carries two meanings, on a page or across pages.
    --------------------------------------------------------------------- */
 const C_PROF = '#0070B9';
+/* direction of change: purple for improvement, orange against it. Deliberately
+   not green/red, at NYCPS's request. */
+const C_UP = '#6A3D8A', C_DOWN = '#D67C20';
 const LVL_COLOR  = ['#C0483C','#E8A33D','#6FB0C7','#1C355E'];   // Level 1 to 4
 const RESERVED = new Set([C_PROF, ...LVL_COLOR]);
 const CAT = ['#6D345F','#0F7B6C','#B0722E','#4F748B','#7C6BAD',
              '#A0416B','#3F7A3F','#8A5A44','#2E7D8F','#6B6F2E','#5B5EA6'];
-console.assert(!CAT.some(c => RESERVED.has(c)), 'categorical palette reuses a reserved colour');
+console.assert(!CAT.some(c => RESERVED.has(c)), 'categorical palette reuses a reserved color');
 const BORO_COLOR = { 'Bronx':CAT[0], 'Brooklyn':CAT[1], 'Manhattan':CAT[2],
                      'Queens':CAT[3], 'Staten Island':CAT[4] };
 const CSS = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
@@ -288,8 +296,6 @@ function markerPlugin(getMarks){
         ctx.save();
         ctx.fillStyle = 'rgba(120,134,148,.055)';
         ctx.fillRect(a.left, a.top, edge-a.left, a.bottom-a.top);
-        ctx.fillStyle = '#8A96A3'; ctx.font = '600 10px Hind'; ctx.textAlign = 'center';
-        if (edge-a.left > 74) ctx.fillText('before NYC Reads', (a.left+edge)/2, a.bottom-7);
         ctx.restore();
       }
     },
@@ -328,7 +334,12 @@ const CHARTS = {};
 function draw(id, cfg){
   const cv = document.getElementById(id);
   if (!cv) return;
+  /* Destroy whatever is actually attached to this canvas, not merely the
+     instance we happen to be tracking. If a render is interrupted part way
+     the two can diverge, and Chart.js then refuses to reuse the canvas. */
   if (CHARTS[id]) CHARTS[id].destroy();
+  const attached = Chart.getChart ? Chart.getChart(cv) : null;
+  if (attached) attached.destroy();
   cfg.options = cfg.options || {};
   cfg.options.responsive = true;
   cfg.options.maintainAspectRatio = false;
@@ -384,7 +395,7 @@ function fillDims(el, v='all'){ fill(el, D.dims.map(d=>({v:d.k,t:d.label})), v);
 /* category select follows the chosen dimension */
 function fillCats(dimEl, catEl){
   const dim = D.dims.find(d => d.k === dimEl.value) || D.dims[0];
-  fill(catEl, dim.cats.map(c=>({v:c, t:CATS[c]})));
+  fill(catEl, dim.cats.map(c=>({v:c, t:catName(c)})));
   catEl.style.display = dim.cats.length > 1 ? '' : 'none';
 }
 function fillMetrics(el, keys, v){ fill(el, keys.map(k=>({v:k,t:METRICS[k].label})), v); }
@@ -492,13 +503,13 @@ function activeBar(hostId, prefix, total, totalLabel){
 /* group label used in subtitles */
 function groupLabel(dimEl, catEl){
   const dim = D.dims.find(d => d.k === dimEl.value);
-  return dim.cats.length > 1 ? CATS[+catEl.value] : 'all students';
+  return dim.cats.length > 1 ? catName(+catEl.value) : 'all students';
 }
 
 /* ---------------------------------------------------------------------
    Slope (dumbbell) chart.
    One row per group: a connector from the baseline value to the 2026 value,
-   a hollow dot at the baseline and a filled dot at 2026, coloured by whether
+   a hollow dot at the baseline and a filled dot at 2026, colored by whether
    the movement is an improvement. Shows level and change in one read, which
    a bar of changes alone cannot do: a group can move a long way and still sit
    far below everyone else.
@@ -518,7 +529,7 @@ function slopeChart(id, rows, opts){
         const yy = y.getPixelForValue(i);
         const x0 = x.getPixelForValue(r.from), x1 = x.getPixelForValue(r.to);
         const improving = (r.to - r.from) * good > 0;
-        const col = improving ? '#0F7B6C' : '#C0483C';
+        const col = improving ? C_UP : C_DOWN;
         /* baseline: hollow */
         ctx.beginPath(); ctx.arc(x0, yy, 5.5, 0, 7); ctx.fillStyle = '#fff';
         ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = '#94A3B8'; ctx.stroke();
@@ -540,7 +551,7 @@ function slopeChart(id, rows, opts){
     data: { labels: rows.map(r => r.label), datasets: [{
       label: 'change',
       data: rows.map(r => [r.from, r.to]),
-      backgroundColor: rows.map(r => (r.to - r.from) * good > 0 ? '#0F7B6C55' : '#C0483C55'),
+      backgroundColor: rows.map(r => (r.to - r.from) * good > 0 ? C_UP+'55' : C_DOWN+'55'),
       borderWidth: 0, barThickness: 4, borderSkipped: false,
     }]},
     options: {
@@ -628,7 +639,8 @@ function renderOV(){
       plugins:{ tooltip:ppTip('%'), legend:{position:'bottom'} } },
     plugins:[markerPlugin(ovMarks)]
   });
-  $('ov-trend-marks').innerHTML = MARKS.ov ? markHTML(WAVES) : '';
+  $('ov-trend-marks').innerHTML = (MARKS.ov ? markHTML(WAVES) : '')
+    + `<span><i class="dot" style="background:#DDE3E9"></i>Shaded: before NYC Reads reached a tested grade</span>`;
 
   /* ---- distribution by year ---- */
   draw('ov-dist', {
@@ -644,6 +656,8 @@ function renderOV(){
   /* ---- diverging by grade ---- */
   const zy = +$('ov-zyear').value;
   const gs = ['g3','g4','g5','g6','g7','g8'].map(k => agg('city',[0],k,zy,cat));
+  const zMax = Math.max(...gs.filter(Boolean).flatMap(a => [a.l1+a.l2, a.l3+a.l4]), 10);
+  const zBound = Math.min(100, Math.ceil(zMax/10)*10);
   draw('ov-zero', {
     type:'bar',
     data:{ labels: ['Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8'], datasets:[
@@ -655,8 +669,10 @@ function renderOV(){
       { label:'Level 4', backgroundColor:LVL_COLOR[3], data: gs.map(a=>a? a.l4:null), borderWidth:0 },
     ]},
     options:{ scales:{ x:Object.assign({stacked:true},gridX),
-        y:gridY('← below proficient   ·   proficient →',{stacked:true,min:-70,max:70,
-          ticks:{callback:v=>Math.abs(v)+'%'}}) },
+        /* the axis follows the data: Students with Disabilities put ~78% below
+           the line, which a fixed 70 clipped */
+        y:gridY('← below proficient   ·   proficient →',{stacked:true,
+          min:-zBound, max:zBound, ticks:{callback:v=>Math.abs(v)+'%'}}) },
       plugins:{ legend:{display:false},
         tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${f1(Math.abs(c.parsed.y))}%`}} } }
   });
@@ -680,6 +696,7 @@ function renderOV(){
      Only 2022 is carried back. 2018 and 2019 add nothing here and their own
      two-point stub invited exactly the cross-era comparison the break exists
      to prevent. The empty slot is the standards change. */
+  /* one narrow blank slot marks the standards change without leaving a hole */
   const longLabels = ['2022','','2023','2024','2025','2026'];
   const slotFor = { 2022:0, 2023:2, 2024:3, 2025:4, 2026:5 };
   const mk = getter => { const a = new Array(6).fill(null);
@@ -699,6 +716,9 @@ function renderOV(){
         tooltip:{callbacks:{ title:c=>longLabels[c[0].dataIndex]||'', label:c=>`${c.dataset.label}: ${f1(c.parsed.y)}%` }} } },
     plugins:[markerPlugin(() => MARKS.ov ? markSet(WAVES, y => slotFor[y] ?? null) : [])]
   });
+  $('ov-long-marks').innerHTML =
+    `<span><i class="dot" style="background:#DDE3E9"></i>Shaded: before NYC Reads reached a tested grade</span>`
+    + `<span class="muted">The blank position on the axis is the 2023 standards change. 2020 and 2021 have no usable data.</span>`;
 }
 function kpi(label, value, unit, up, sub, cls){
   return `<div class="kc ${cls||''}"><div class="kl">${esc(label)}</div>
@@ -719,7 +739,7 @@ function ggCount(bk, cat, base){
 function csvOV(){
   const bk=$('ov-grade').value, cat=+$('ov-cat').value;
   const rows=[['NYC Reads ELA Explorer — citywide'],
-    ['Grades',band(bk).label],['Student group',CATS[cat]],['Generated',BUILD],[],
+    ['Grades',band(bk).label],['Student group',catName(cat)],['Generated',BUILD],[],
     ['Year','Students tested','% Level 1','% Level 2','% Level 3','% Level 4','% Level 3+4','Mean scale score','Comparable to 2023+']];
   for (const y of YEARS){ const a=agg('city',[0],bk,y,cat);
     rows.push([y, a?a.n:'', a?f2(a.l1):'', a?f2(a.l2):'', a?f2(a.l3):'', a?f2(a.l4):'', a?f2(a.prof):'', a?f1(a.mean):'', y>=2023?'yes':'no (previous standards)']); }
@@ -747,7 +767,7 @@ function renderFocus(prefix, lvl, geoIdx, name, bk, cat, base){
 
   $(prefix+'-focus-title').textContent = name;
   $(prefix+'-focus-sub').textContent =
-    `${band(bk).label}, ${CATS[cat] === 'All Students' ? 'all students' : CATS[cat]}, measured against ${base}.`;
+    `${band(bk).label}, ${catName(cat)}, measured against ${base}.`;
 
   $(prefix+'-focus-kpi').innerHTML = [
     kpi('2026 proficiency', cur?f1(cur.prof):'—','%', null, 'Level 3–4 share', 'n'),
@@ -822,6 +842,7 @@ function initDI(){
   };
 }
 function buildDIAssignmentPickers(){
+  if (!HAS_VENDORS) return;                 // public build carries no assignments
   const bk = $('di-grade').value, sc = scopeOf(bk);
   const lbl = sc==='k5' ? 'K–5' : sc==='ms' ? 'Grades 6–8' : 'Any';
   multiSelect('di-ms-reads', `${lbl} provider (JESP)`,
@@ -865,9 +886,9 @@ function diRows(){
    when it moved the wrong way on both. Anything else is mixed. */
 function signal(r){
   if (r.dprof==null || r.dl1==null) return { t:'—', c:'#9CA3AF', rank:-1, k:'na' };
-  if (r.dl1<0 && r.dprof>0) return { t:'Improved on both', c:'#0F7B6C', rank:3, k:'green' };
-  if (r.dl1<0 || r.dprof>0) return { t:'Mixed',            c:'#6FB0C7', rank:2, k:'mixed' };
-  return { t:'Worse on both', c:'#C0483C', rank:1, k:'flag' };
+  if (r.dl1<0 && r.dprof>0) return { t:'Improved on both', c:C_UP,   rank:3, k:'up' };
+  if (r.dl1<0 || r.dprof>0) return { t:'Mixed',            c:'#94A3B2', rank:2, k:'mixed' };
+  return { t:'Worse on both', c:C_DOWN, rank:1, k:'down' };
 }
 function renderDI(){
   const base=+$('di-base').value, rows=diRows(), mk=$('di-metric').value, M=METRICS[mk];
@@ -911,8 +932,8 @@ function renderDI(){
 
   /* named lists, so the two groups that matter can be read at a glance */
   const byMove = (a,b) => (b.dprof - a.dprof);
-  const green = valid.filter(r=>signal(r).k==='green').sort(byMove);
-  const flag  = valid.filter(r=>signal(r).k==='flag').sort((a,b)=>a.dprof-b.dprof);
+  const green = valid.filter(r=>signal(r).k==='up').sort(byMove);
+  const flag  = valid.filter(r=>signal(r).k==='down').sort((a,b)=>a.dprof-b.dprof);
   const mixed = valid.filter(r=>signal(r).k==='mixed');
   const chips = (rows, col) => rows.length
     ? rows.map(r=>`<span class="dchip" style="border-color:${col}44;background:${col}0F">`
@@ -922,16 +943,16 @@ function renderDI(){
     : '<span class="muted">None on this selection.</span>';
   $('di-flags').innerHTML = `
     <div class="flagbox">
-      <div class="flaghd"><span class="dot" style="background:#0F7B6C"></span>
+      <div class="flaghd"><span class="dot" style="background:${C_UP}"></span>
         Improved on both <b>(${green.length})</b>
         <span class="muted">fewer Level 1s and higher proficiency vs ${base}</span></div>
-      <div class="chiprow">${chips(green,'#0F7B6C')}</div>
+      <div class="chiprow">${chips(green,C_UP)}</div>
     </div>
     <div class="flagbox">
-      <div class="flaghd"><span class="dot" style="background:#C0483C"></span>
+      <div class="flaghd"><span class="dot" style="background:${C_DOWN}"></span>
         Worse on both <b>(${flag.length})</b>
         <span class="muted">more Level 1s and lower proficiency vs ${base}</span></div>
-      <div class="chiprow">${chips(flag,'#C0483C')}</div>
+      <div class="chiprow">${chips(flag,C_DOWN)}</div>
     </div>
     <div class="flagnote">Each chip shows the district, then its change in proficiency and in the Level&nbsp;1 share in percentage points, then its NYC Reads wave (P1 or P2 elementary, MS1 if it also began the middle-school rollout). ${mixed.length} district${mixed.length===1?'':'s'} moved the right way on one measure only and ${mixed.length===1?'is':'are'} not listed here.</div>`;
 
@@ -943,13 +964,13 @@ function renderDI(){
       const {ctx, chartArea:a, scales:{x,y}} = c;
       const x0 = x.getPixelForValue(0), y0 = y.getPixelForValue(0);
       ctx.save();
-      ctx.fillStyle = 'rgba(15,123,108,.06)';
+      ctx.fillStyle = 'rgba(106,61,138,.07)';
       ctx.fillRect(a.left, a.top, Math.max(0,x0-a.left), Math.max(0,y0-a.top));
       ctx.strokeStyle = '#9AA6B2'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
       ctx.beginPath(); ctx.moveTo(x0,a.top); ctx.lineTo(x0,a.bottom);
       ctx.moveTo(a.left,y0); ctx.lineTo(a.right,y0); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#0F7B6C'; ctx.font = '600 11px Hind';
+      ctx.fillStyle = C_UP; ctx.font = '600 11px Hind';
       ctx.fillText('fewer Level 1s + higher proficiency', a.left+8, a.top+16);
       ctx.restore();
     }
@@ -982,7 +1003,7 @@ function renderDI(){
     type:'bar',
     data:{ labels: rk.map(r=>'D'+D.districts[r.i]), datasets:[{
       label:`Change in ${M.short}`, data: rk.map(r=>r.v), borderWidth:0,
-      backgroundColor: rk.map(r => (r.v*M.good) > 0 ? '#0F7B6C' : '#C0483C') }]},
+      backgroundColor: rk.map(r => (r.v*M.good) > 0 ? C_UP : C_DOWN) }]},
     options:{ indexAxis:'y',
       scales:{ x:gridY(`change vs ${base}${mk==='mean'?' (points)':' (pp)'}`),
                y:{grid:{display:false},ticks:{font:{size:10.5},autoSkip:false}} },
@@ -1030,8 +1051,12 @@ function renderCohort(rows, base){
       data: pts.filter(p=>p.boro===b).map(p=>({x:p.dn, y:p.dp, r:7, d:p}))
     })).filter(ds=>ds.data.length) },
     options:{
-      scales:{ x:gridY(`change in students tested vs ${base} (%)`),
-               y:gridY(`change in proficiency vs ${base} (pp)`) },
+      scales:{ x:gridY(`change in students tested vs ${base} (%)`,
+                 {grid:{color:c=>c.tick.value===0?'#5B6B7A':'#EDF1F5',
+                        lineWidth:c=>c.tick.value===0?1.6:1}}),
+               y:gridY(`change in proficiency vs ${base} (pp)`,
+                 {grid:{color:c=>c.tick.value===0?'#5B6B7A':'#EDF1F5',
+                        lineWidth:c=>c.tick.value===0?1.6:1}}) },
       plugins:{ legend:{display:false},
         tooltip:{callbacks:{ label:c=>{ const d=c.raw.d;
           return [`District ${D.districts[d.i]} · ${d.boro}`,
@@ -1043,6 +1068,8 @@ function renderCohort(rows, base){
   const shrank = pts.filter(p=>p.dn < -5), steady = pts.filter(p=>p.dn >= -2);
   const mean = a => a.reduce((x,y)=>x+y,0)/a.length;
   $('di-cohort-note').innerHTML =
+    `The darker lines mark zero on each axis. A district above the horizontal line raised proficiency; one to the right of the vertical line tested more students than in ${base}. `
+    +
     `Across the ${pts.length} districts shown, the change in how many students sat the test correlates with the change in proficiency at <b>r = ${rP.toFixed(2)}</b>, and with the change in the Level&nbsp;1 share at <b>r = ${rL.toFixed(2)}</b>. `
     + (shrank.length && steady.length
       ? `The ${shrank.length} districts whose tested cohort shrank by more than 5% averaged <b>${pp(mean(shrank.map(p=>p.dp)))}pp</b> on proficiency and <b>${pp(mean(shrank.map(p=>p.dl)))}pp</b> on Level&nbsp;1; the ${steady.length} whose cohort held steady or grew averaged <b>${pp(mean(steady.map(p=>p.dp)))}pp</b> and <b>${pp(mean(steady.map(p=>p.dl)))}pp</b>. `
@@ -1055,7 +1082,9 @@ function renderCohort(rows, base){
    shows both, since both are in play. */
 function diCols(bk){
   const sc = scopeOf(bk);
-  const assign = sc === 'both'
+  const assign = !HAS_VENDORS ? [
+        {k:'phaseBoth', t:'Phase (elem / MS)', sort:r=>r.elem+r.ms, kind:'phaseBoth'} ]
+    : sc === 'both'
     ? [ {k:'phaseBoth', t:'Phase (elem / MS)', sort:r=>r.elem+r.ms, kind:'phaseBoth'},
         {k:'k5j', t:'K–5 provider',   sort:r=>r.k5j, kind:'wrap'},
         {k:'k5c', t:'K–5 curriculum', sort:r=>r.k5c, kind:'text'},
@@ -1122,7 +1151,7 @@ function renderDITable(rows, base){
 function csvDI(){
   const base=+$('di-base').value, rows=diRows();
   const out=[['NYC Reads ELA Explorer — districts'],
-    ['Grades',band($('di-grade').value).label],['Student group',CATS[+$('di-cat').value]],
+    ['Grades',band($('di-grade').value).label],['Student group',catName(+$('di-cat').value)],
     ['Baseline',base],['Generated',BUILD],[],
     ['District','Borough','Elementary phase','Middle school phase','K-5 provider (JESP)','K-5 curriculum','Grades 6-8 provider (JESP)','Grades 6-8 curriculum','Tested 2026','Change in students tested (%)',
      '% Level 1 2026','% Level 2 2026','% Level 3 2026','% Level 4 2026','% Level 3+4 2026','Mean scale score 2026',
@@ -1188,7 +1217,7 @@ function renderBO(){
   const bl = band(bk).label.toLowerCase(), gl = groupLabel($('bo-dim'),$('bo-cat'));
 
   $('bo-trendsub').textContent = `${M.label}, ${band(bk).label.toLowerCase()}, ${gl.toLowerCase()}, 2023 to 2026.`;
-  $('bo-dsub').innerHTML = `${M.label} in 2026 for all 32 community school districts, ordered ${M.good>0?'highest to lowest':'lowest to highest'}. Bars are coloured by borough. District values come from the district file and will not sum to the borough bars above.`;
+  $('bo-dsub').innerHTML = `${M.label} in 2026 for all 32 community school districts, ordered ${M.good>0?'highest to lowest':'lowest to highest'}. Bars are colored by borough. District values come from the district file and will not sum to the borough bars above.`;
 
   const shown = boShown();
   const dshown = boDistricts();
@@ -1230,7 +1259,7 @@ function renderBO(){
       plugins:{ legend:{display:false}, tooltip:ppTip('%') } }
   });
 
-  /* districts coloured by borough */
+  /* districts colored by borough */
   const dd = dshown.map(i => ({ i, boro:D.districtBoro[i], a: agg('dist',[i],bk,2026,cat) }))
                    .filter(d=>d.a).sort((a,b)=>(M.get(b.a)-M.get(a.a))*M.good);
   draw('bo-dbar', {
@@ -1265,7 +1294,7 @@ function renderBO(){
 function csvBO(){
   const base=+$('bo-base').value, bk=$('bo-grade').value, cat=+$('bo-cat').value;
   const out=[['NYC Reads ELA Explorer — boroughs'],
-    ['Grades',band(bk).label],['Student group',CATS[cat]],['Baseline',base],['Generated',BUILD],[],
+    ['Grades',band(bk).label],['Student group',catName(cat)],['Baseline',base],['Generated',BUILD],[],
     ['Borough','Year','Students tested','% Level 1','% Level 2','% Level 3','% Level 4','% Level 3+4','Mean scale score']];
   for (const i of boShown()) for (const y of MODERN){
     const a=agg('boro',[i],bk,y,cat);
@@ -1408,7 +1437,7 @@ function csvPH(){
     ['Elementary Phase 2 districts (grades 6-8 check)','68',D.phase.elem2],
   ];
   const out=[['NYC Reads ELA Explorer — phase groups'],
-    ['Student group',CATS[cat]],['Generated',BUILD],
+    ['Student group',catName(cat)],['Generated',BUILD],
     ['Note','Group aggregates are sums of student counts across districts; District 75 is not in the district file'],[],
     ['Group','Tested grades','Districts','Year','Students tested','% Level 1','% Level 3+4','Mean scale score']];
   for (const [name,bk,ds] of groups) for (const y of MODERN){
@@ -1450,7 +1479,7 @@ function renderSG(){
 
   const PAL = CAT;
   const series = dim.cats.map((c,i) => ({
-    c, name:CATS[c], color:PAL[i%PAL.length],
+    c, name:catName(c), color:PAL[i%PAL.length],
     vals: MODERN.map(y => { const a=agg(lvl,[geo],bk,y,c); return a?M.get(a):null; }),
     cur: agg(lvl,[geo],bk,2026,c), b23: agg(lvl,[geo],bk,2023,c), b24: agg(lvl,[geo],bk,2024,c),
   }));
@@ -1483,7 +1512,7 @@ function renderSG(){
 
   /* citywide paired gaps (always citywide, all grades — stated on the card) */
   const gapSeries = GAP_PAIRS.map(([a,b],i) => ({
-    name:`${a} − ${b}`, color:PAL[i%PAL.length],
+    name:`${catName(CATS.indexOf(a))} − ${catName(CATS.indexOf(b))}`, color:PAL[i%PAL.length],
     vals: MODERN.map(y => {
       const A=agg('city',[0],'all',y,CATS.indexOf(a)), B=agg('city',[0],'all',y,CATS.indexOf(b));
       return A&&B ? A.prof-B.prof : null; })
@@ -1519,7 +1548,7 @@ function csvSG(){
     ['Student group','Year','Students tested','% Level 1','% Level 2','% Level 3','% Level 4','% Level 3+4','Mean scale score']];
   for (const dim of D.dims) for (const c of dim.cats) for (const y of MODERN){
     const a=agg(lvl,[geo],bk,y,c);
-    out.push([CATS[c], y, a?a.n:'s', a?f2(a.l1):'s', a?f2(a.l2):'s', a?f2(a.l3):'s', a?f2(a.l4):'s', a?f2(a.prof):'s', a?f1(a.mean):'s']);
+    out.push([catName(c), y, a?a.n:'s', a?f2(a.l1):'s', a?f2(a.l2):'s', a?f2(a.l3):'s', a?f2(a.l4):'s', a?f2(a.prof):'s', a?f1(a.mean):'s']);
   }
   return out;
 }
@@ -1786,7 +1815,7 @@ function csvVE(){
   const base=+$('ve-base').value, cat=+$('ve-cat').value, bk=$('ve-band').value;
   const kind = VE_FIELDS[$('ve-group').value].label;
   const out=[['NYC Reads ELA Explorer — providers and curriculum'],
-    ['Grouped by',kind],['Grades',band(bk).label],['Student group',CATS[cat]],
+    ['Grouped by',kind],['Grades',band(bk).label],['Student group',catName(cat)],
     ['Baseline',base],['Generated',BUILD],
     ['Source','Curriculum and JESP assignments for school year 2025-26, the year the spring 2026 test measures'],
     ['Note','Group aggregates sum student counts across districts.'],[],
@@ -1802,7 +1831,8 @@ function csvVE(){
 /* =====================================================================
    NAVIGATION + WIRING
    ===================================================================== */
-const RENDER = { ov:renderOV, di:renderDI, bo:renderBO, ph:renderPH, ve:renderVE, sg:renderSG, tf:renderTF };
+const RENDER = { ov:renderOV, di:renderDI, bo:renderBO, ph:renderPH, sg:renderSG, tf:renderTF };
+if (HAS_VENDORS) RENDER.ve = renderVE;
 const CSVFN  = { ov:csvOV, di:csvDI, bo:csvBO, ph:csvPH, ve:csvVE, sg:csvSG, tf:csvTF };
 const drawn = new Set();
 
@@ -1834,7 +1864,7 @@ Object.keys(MARKS).forEach(p => {
   el.addEventListener('change', () => { MARKS[p] = el.checked; RENDER[p](); });
 });
 
-initOV(); initDI(); initBO(); initPH(); initVE(); initSG(); initTF();
+initOV(); initDI(); initBO(); initPH(); if (HAS_VENDORS) initVE(); initSG(); initTF();
 renderOV(); drawn.add('ov');
 
 $('buildstamp').textContent = `Built ${BUILD}.`;
@@ -1845,19 +1875,44 @@ $('buildstamp').textContent = `Built ${BUILD}.`;
    may be shared; VENDOR_APPROVED flips that.
    --------------------------------------------------------------------- */
 const VENDOR_APPROVED = false;
+const INFOHUB_URL = 'https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results';
+
+/* What the figures do and do not cover, stated once, from the NYCPS notes. */
+$('coverage').innerHTML = `
+  <h4>What these results cover</h4>
+  <ul class="cov">
+    <li><b>District here means community school district, not superintendency.</b> The 32
+        districts are the geographic community school districts numbered 1 to 32. No result
+        is attributed to a superintendent or to a superintendency.</li>
+    <li><b>Charter schools are not included at any level.</b> The NYCPS notes state that
+        charter schools are excluded from these files, citywide as well as by borough and
+        district. School-level charter results are published separately by NYCPS.</li>
+    <li><b>District 75 students appear in the citywide results only</b>, and are excluded
+        from the borough and district files.</li>
+    <li><b>Out-of-district placement students appear in the citywide and borough results</b>,
+        and are excluded from the district file. Before 2025 they were attributed separately;
+        from 2025 they are attributed to the school they attended.</li>
+    <li>Because of the three points above, the citywide, borough and district files do not
+        sum to one another, and each level is read only from its own file.</li>
+    <li><b>Opt-out and participation rates are not included.</b> The NYCPS files report the
+        number of students tested with no enrollment denominator, and no participation or
+        opt-out figure is published alongside them on the InfoHub.</li>
+  </ul>`;
+
 $('sources').innerHTML = `<h4>Sources</h4><ol>
   <li><b>ELA results, grades 3 to 8, 2018 to 2026.</b> New York City Public Schools,
       public ELA results files (citywide, borough and district), published on the NYCPS
-      InfoHub. File date 3&nbsp;August&nbsp;2026.</li>
+      InfoHub. File date 3&nbsp;August&nbsp;2026.
+      <a href="${INFOHUB_URL}" target="_blank" rel="noopener">Download the source files from the NYCPS InfoHub</a>.</li>
   <li><b>NYC Reads launch phases by district.</b> New York City Public Schools, NYC Reads
-      programme information.</li>
-  <li><b>Curriculum and professional learning provider by district, school year
-      2025&ndash;26.</b> New York City Public Schools.</li>
+      program information.</li>
+  ${HAS_VENDORS ? `<li><b>Curriculum and professional learning provider by district, school year
+      2025&ndash;26.</b> New York City Public Schools.</li>` : ''}
 </ol>`
-+ (VENDOR_APPROVED ? '' :
++ (VENDOR_APPROVED || !HAS_VENDORS ? '' :
    `<div class="pending"><b>Pending confirmation.</b> Source 3 is shown while approval to
     share the district-level curriculum and provider assignments is confirmed with NYCPS.
-    Wording to be finalised before wider circulation.</div>`);
+    Wording to be finalized before wider circulation.</div>`);
 
 $('foot').innerHTML = `<b>NYC Reads &mdash; ELA Results Explorer.</b> Prepared by the Center for Public Research and Leadership. `
   + `Percentages are computed from student counts rather than copied from the published percentage columns; grade bands and district groups are aggregated by summing counts. `

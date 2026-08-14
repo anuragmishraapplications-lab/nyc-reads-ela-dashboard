@@ -7,6 +7,7 @@ and sign of every change.  Any disagreement is reported.
 import openpyxl, json, os, sys, re
 R = os.path.join(os.path.dirname(__file__), '..')
 YEARS=[2018,2019,2022,2023,2024,2025,2026]; MODERN=[2023,2024,2025,2026]
+CAT_LABEL={'All Students': 'All Students', 'SWD': 'Students with Disabilities', 'Not SWD': 'Students without Disabilities', 'Econ Disadv': 'Economically Disadvantaged Students', 'Not Econ Disadv': 'Students Not Economically Disadvantaged', 'Current ELL': 'Current English Language Learners', 'Ever ELL': 'Ever English Language Learners', 'Never ELL': 'Never English Language Learners', 'Asian': 'Asian', 'Black': 'Black', 'Hispanic': 'Hispanic', 'Multi-Racial': 'Multi-Racial', 'Native American': 'Native American', 'White': 'White', 'Female': 'Female', 'Male': 'Male', 'Neither Female nor Male': 'Neither Female nor Male'}
 CATS=['All Students','SWD','Not SWD','Econ Disadv','Not Econ Disadv','Current ELL','Ever ELL',
       'Never ELL','Asian','Black','Hispanic','Multi-Racial','Native American','White',
       'Female','Male','Neither Female nor Male']
@@ -176,8 +177,9 @@ for e in REN:
             for yi,y in enumerate(MODERN):
                 a=A(lvl,[gid],'all',y,CATS.index(cn))
                 cmp(f'sg trend {lvl} {cn} {y} {m}', e['trend'][ci]['v'][yi], a[key] if a else None, 1e-5)
+        INV={v:k for k,v in CAT_LABEL.items()}
         for row in e['tbl'][1:]:
-            cn=row[0]; a=A(lvl,[gid],'all',2026,CATS.index(cn))
+            cn=INV.get(row[0], row[0]); a=A(lvl,[gid],'all',2026,CATS.index(cn))
             cmp(f'sg tbl n {lvl} {cn}', row[1], numf(a['n']) if a else 's')
             cmp(f'sg tbl l1 {lvl} {cn}', row[2], f1(a['l1']) if a else 's')
             cmp(f'sg tbl prof {lvl} {cn}', row[3], f1(a['prof']) if a else 's')
@@ -185,6 +187,7 @@ for e in REN:
                ('Not SWD','SWD'),('Never ELL','Current ELL')]
         for ri,(x,y2) in enumerate(PAIRS):
             row=e['gap'][ri+1]
+            cmp(f'sg gap label {x}-{y2}', row[0], f'{CAT_LABEL[x]} − {CAT_LABEL[y2]}')
             for yi,y in enumerate(MODERN):
                 Ax=A('city',['city'],'all',y,CATS.index(x)); Bx=A('city',['city'],'all',y,CATS.index(y2))
                 cmp(f'sg gap {x}-{y2} {y}', row[yi+1], f1(Ax['prof']-Bx['prof']) if Ax and Bx else 's')

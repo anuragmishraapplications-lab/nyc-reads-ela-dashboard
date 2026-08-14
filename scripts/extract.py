@@ -27,15 +27,40 @@ CATS = ['All Students',
         'Female', 'Male', 'Neither Female nor Male']
 CI = {c: i for i, c in enumerate(CATS)}
 
+# Display names for the reported groups.
+# The Category column in the source files uses abbreviations ('SWD',
+# 'Econ Disadv'). NYCPS asked that the dashboard spell these out. The keys
+# below are the file's exact strings and are what every lookup uses; the
+# values are what the reader sees. Nothing about the data changes.
+CAT_LABEL = {
+    'All Students':            'All Students',
+    'SWD':                     'Students with Disabilities',
+    'Not SWD':                 'Students without Disabilities',
+    'Econ Disadv':             'Economically Disadvantaged Students',
+    'Not Econ Disadv':         'Students Not Economically Disadvantaged',
+    'Current ELL':             'Current English Language Learners',
+    'Ever ELL':                'Ever English Language Learners',
+    'Never ELL':               'Never English Language Learners',
+    'Asian':                   'Asian',
+    'Black':                   'Black',
+    'Hispanic':                'Hispanic',
+    'Multi-Racial':            'Multi-Racial',
+    'Native American':         'Native American',
+    'White':                   'White',
+    'Female':                  'Female',
+    'Male':                    'Male',
+    'Neither Female nor Male': 'Neither Female nor Male',
+}
+
 # which sheet a category belongs to (dimension grouping for the UI)
 DIMS = [
-    ('all',   'All students',          ['All Students']),
-    ('swd',   'Students with disabilities', ['SWD', 'Not SWD']),
-    ('econ',  'Economic status',       ['Econ Disadv', 'Not Econ Disadv']),
-    ('ell',   'English language learners', ['Current ELL', 'Ever ELL', 'Never ELL']),
-    ('eth',   'Race / ethnicity',      ['Asian', 'Black', 'Hispanic', 'Multi-Racial',
-                                        'Native American', 'White']),
-    ('gen',   'Gender',                ['Female', 'Male', 'Neither Female nor Male']),
+    ('all',   'All Students',              ['All Students']),
+    ('swd',   'Students with Disabilities', ['SWD', 'Not SWD']),
+    ('econ',  'Economic Status',            ['Econ Disadv', 'Not Econ Disadv']),
+    ('ell',   'English Language Learners',  ['Current ELL', 'Ever ELL', 'Never ELL']),
+    ('eth',   'Ethnicity',                  ['Asian', 'Black', 'Hispanic', 'Multi-Racial',
+                                             'Native American', 'White']),
+    ('gen',   'Gender',                     ['Female', 'Male', 'Neither Female nor Male']),
 ]
 
 BORO_OF = {}
@@ -304,6 +329,7 @@ def main():
         'years': YEARS,
         'grades': GRADES,
         'cats': CATS,
+        'catLabels': [CAT_LABEL[c] for c in CATS],
         'dims': [{'k': k, 'label': lab, 'cats': [CI[c] for c in cs]} for k, lab, cs in DIMS],
         'boros': BOROS,
         'districts': DISTRICTS,

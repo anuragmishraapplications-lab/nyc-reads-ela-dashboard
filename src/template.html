@@ -53,6 +53,11 @@ select:focus,.btn:focus{outline:2px solid var(--c2);outline-offset:1px}
 .btn.gh{background:#fff;color:var(--navy);border-color:var(--line)}
 .btn.gh:hover{background:#EEF3F8}
 .spacer{flex:1}
+a.srcbtn{text-decoration:none;display:inline-block}
+.cov{margin:0 0 0 17px;font-size:12px;color:#41505C;line-height:1.75}
+.cov li{margin-bottom:6px}
+.sources h4,.coverage h4{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--accent);font-weight:700;margin-bottom:10px}
+.coverage{margin-top:30px;border-top:2px solid var(--ink);padding-top:18px}
 
 /* ---------- kpis ---------- */
 .kr{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-bottom:24px}
@@ -205,7 +210,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Group</span><select id="ov-dim"></select><select id="ov-cat"></select></div>
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="ov-marks-t" checked> Phase markers</label>
-    <button class="btn gh" data-csv="ov">Download CSV</button>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="ov-insight"></div>
@@ -246,10 +251,11 @@ dl.defs dd{margin-left:0;color:#41505C}
 
   <div class="cd">
     <div class="cdh"><div><div class="ct">Results under the previous standards, 2022, against 2023 to 2026</div>
-      <div class="cs">2022 is the last year on the previous standards, shown as a single reference point against the comparable era. The gap in the axis is the standards change. Exams were cancelled in 2020 and voluntary in 2021, so those years have no usable data.</div></div>
+      <div class="cs">2022 is the last year on the previous standards, shown as a single reference point against the comparable era. The gap in the axis is the standards change. Exams were canceled in 2020 and voluntary in 2021, so those years have no usable data.</div></div>
       <button class="btn gh" data-png="ov-long">PNG</button></div>
-    <div class="note warn" style="margin-bottom:14px">2022 sits on the previous standards and cannot be differenced against 2023 or later. The break in the line is deliberate, and no change is calculated across it anywhere in this tool.</div>
     <div class="cc" id="wrap-ov-long"><canvas id="ov-long"></canvas></div>
+    <div class="note warn" style="margin:16px 0 0">2022 sits on the previous standards and cannot be differenced against 2023 or later. The break in the line is deliberate, and no change is calculated across it anywhere in this tool.</div>
+    <div class="mkl" id="ov-long-marks"></div>
   </div>
 </section>
 
@@ -272,7 +278,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Curriculum</span><div id="di-ms-curr"></div></div>
     <div class="spacer"></div>
     <button class="btn gh" id="di-reset" type="button">Reset filters</button>
-    <button class="btn gh" data-csv="di">Download CSV</button>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div id="di-focus" style="display:none">
@@ -327,7 +333,7 @@ dl.defs dd{margin-left:0;color:#41505C}
 
   <div class="cd" id="di-cohort-wrap">
     <div class="cdh"><div><div class="ct">Change in cohort size against change in proficiency</div>
-      <div class="cs">Horizontal axis: the change in how many students sat the test. Vertical axis: the change in proficiency. Coloured by borough.</div></div>
+      <div class="cs">Horizontal axis: the change in how many students sat the test. Vertical axis: the change in proficiency. Colored by borough.</div></div>
       <button class="btn gh" data-png="di-cohort">PNG</button></div>
     <div class="cc" id="wrap-di-cohort"><canvas id="di-cohort"></canvas></div>
     <div class="note warn" id="di-cohort-note" style="margin:16px 0 0"></div>
@@ -365,7 +371,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="bo-marks-t" checked> Phase markers</label>
     <button class="btn gh" id="bo-reset" type="button">Reset filters</button>
-    <button class="btn gh" data-csv="bo">Download CSV</button>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div id="bo-focus" style="display:none">
@@ -410,7 +416,7 @@ dl.defs dd{margin-left:0;color:#41505C}
   </div>
 
   <div class="cd">
-    <div class="cdh"><div><div class="ct">Selected measure by district, 2026, coloured by borough</div>
+    <div class="cdh"><div><div class="ct">Selected measure by district, 2026, colored by borough</div>
       <div class="cs" id="bo-dsub"></div></div>
       <button class="btn gh" data-png="bo-dbar">PNG</button></div>
     <div class="cc xl" id="wrap-bo-dbar"><canvas id="bo-dbar"></canvas></div>
@@ -432,7 +438,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="pst">Districts adopted the NYC Reads curricula in successive waves. Because the waves began in different school years, districts had completed different numbers of implementation years by the 2026 test. This page groups districts by wave and reports results for each group.</div>
   </div></div>
 
-  <div class="note warn"><b>Read this before using this page.</b> Districts were not assigned to phases at random, and the groups did not start from the same place. Differences below are descriptive contrasts between groups of districts, not estimates of the effect of NYC Reads. Nothing here isolates the programme from everything else that changed in those districts over the same years.</div>
+  <div class="note warn"><b>Read this before using this page.</b> Districts were not assigned to phases at random, and the groups did not start from the same place. Differences below are descriptive contrasts between groups of districts, not estimates of the effect of NYC Reads. Nothing here isolates the program from everything else that changed in those districts over the same years.</div>
 
   <div class="cd">
     <div class="cdh"><div><div class="ct">NYC Reads launch timeline, by district</div>
@@ -451,7 +457,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Result</span><select id="ph-metric"></select></div>
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="ph-marks-t" checked> Phase markers</label>
-    <button class="btn gh" data-csv="ph">Download CSV</button>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="ph-insight"></div>
@@ -524,7 +530,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="ve-marks-t" checked> Phase markers</label>
     <button class="btn gh" id="ve-reset" type="button">Reset filters</button>
-    <button class="btn gh" data-csv="ve">Download CSV</button>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="ve-insight"></div>
@@ -570,7 +576,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Result</span><select id="sg-metric"></select></div>
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="sg-marks-t" checked> Phase markers</label>
-    <button class="btn gh" data-csv="sg">Download CSV</button>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="sg-insight"></div>
@@ -617,7 +623,7 @@ dl.defs dd{margin-left:0;color:#41505C}
   <div class="fb">
     <div class="fg"><span class="fl">Result</span><select id="tf-metric"></select></div>
     <div class="spacer"></div>
-    <button class="btn gh" data-csv="tf">Download CSV</button>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="tf-insight"></div>
@@ -643,6 +649,7 @@ dl.defs dd{margin-left:0;color:#41505C}
   </div>
 </section>
 
+<div class="coverage" id="coverage"></div>
 <div class="sources" id="sources"></div>
 <div class="foot" id="foot"></div>
 </main>

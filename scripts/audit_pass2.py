@@ -9,6 +9,7 @@ import openpyxl, json, os, sys
 from decimal import Decimal, ROUND_HALF_UP
 R = os.path.join(os.path.dirname(__file__), '..')
 YEARS=[2018,2019,2022,2023,2024,2025,2026]; MODERN=[2023,2024,2025,2026]
+CAT_LABEL={'All Students': 'All Students', 'SWD': 'Students with Disabilities', 'Not SWD': 'Students without Disabilities', 'Econ Disadv': 'Economically Disadvantaged Students', 'Not Econ Disadv': 'Students Not Economically Disadvantaged', 'Current ELL': 'Current English Language Learners', 'Ever ELL': 'Ever English Language Learners', 'Never ELL': 'Never English Language Learners', 'Asian': 'Asian', 'Black': 'Black', 'Hispanic': 'Hispanic', 'Multi-Racial': 'Multi-Racial', 'Native American': 'Native American', 'White': 'White', 'Female': 'Female', 'Male': 'Male', 'Neither Female nor Male': 'Neither Female nor Male'}
 CATS=['All Students','SWD','Not SWD','Econ Disadv','Not Econ Disadv','Current ELL','Ever ELL',
       'Never ELL','Asian','Black','Hispanic','Multi-Racial','Native American','White',
       'Female','Male','Neither Female nor Male']
@@ -217,7 +218,7 @@ def cell(v): return '' if v is None else str(v)
 
 # ov CSV was captured with group = Econ Disadv, all grades
 rows=CSV['ov']; cat=CATS.index('Econ Disadv')
-cmp('csv ov group', rows[2][1], 'Econ Disadv')
+cmp('csv ov group', rows[2][1], CAT_LABEL['Econ Disadv'])
 for i,y in enumerate(YEARS):
     r=rows[6+i]; a=A('city',['city'],'all',y,cat)
     cmp(f'csv ov year {y}', str(r[0]), str(y))
@@ -273,7 +274,7 @@ for b in BOROS:
 
 # ph CSV: SWD
 rows=CSV['ph']; cat=CATS.index('SWD')
-cmp('csv ph group', rows[1][1], 'SWD')
+cmp('csv ph group', rows[1][1], CAT_LABEL['SWD'])
 specs=[('Elementary Phase 1',PHASE['elem1'],'35'),('Elementary Phase 2',PHASE['elem2'],'35'),
        ('Middle school Phase 1',PHASE['ms1'],'68'),
        ('Not yet in middle school rollout',[d for d in range(1,33) if d not in PHASE['ms1']],'68'),
@@ -297,7 +298,7 @@ rows=CSV['sg']; i=6
 for c in range(len(CATS)):
     for y in MODERN:
         r=rows[i]; i+=1; a=A('city',['city'],'all',y,c)
-        cmp(f'csv sg {CATS[c]} {y} name', r[0], CATS[c])
+        cmp(f'csv sg {CATS[c]} {y} name', r[0], CAT_LABEL[CATS[c]])
         cmp(f'csv sg {CATS[c]} {y} n', str(r[2]), str(a['n']) if a else 's')
         for j,k in enumerate(['l1','l2','l3','l4','prof']):
             cmp(f'csv sg {CATS[c]} {y} {k}', r[3+j], f2(a[k]) if a else 's')

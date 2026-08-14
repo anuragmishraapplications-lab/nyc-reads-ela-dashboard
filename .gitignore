@@ -6,3 +6,6 @@ data/school-ela-results-public.xlsx
 data/private/
 email_reply.md
 QC.md
+.preview/
+.claude/launch.json
+NYC_Reads_ELA_Dashboard_INTERNAL.html
