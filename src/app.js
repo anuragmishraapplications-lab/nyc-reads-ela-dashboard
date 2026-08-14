@@ -49,12 +49,13 @@ function agg(lvl, geos, bandKey, year, cat){
   const b = band(bandKey), yi = yIdx(year);
   if (yi < 0) return null;
   const gradeIdxs = b.grades || [AGI];
-  let n=0, c1=0, c2=0, c3=0, c4=0, wMean=0, found=0, want=0, sup=0;
+  let n=0, c1=0, c2=0, c3=0, c4=0, wMean=0, found=0, want=0, sup=0, gmask=0;
   for (const g of geos) for (const gr of gradeIdxs){
     want++;
     const r = getRow(lvl, g, gr, yi, cat);
     if (!r){ sup++; continue; }
     found++;
+    gmask |= (1 << gr);                     // which grades actually contributed
     n += r[4]; c1 += r[6]; c2 += r[7]; c3 += r[8]; c4 += r[9];
     wMean += r[5] * r[4];
   }
@@ -64,9 +65,46 @@ function agg(lvl, geos, bandKey, year, cat){
     l1: c1/n*100, l2: c2/n*100, l3: c3/n*100, l4: c4/n*100,
     prof: (c3+c4)/n*100,
     mean: wMean/n,
+    gmask,                                   // bitmask of contributing grades
+    nGrades: gradeIdxs.length,
     partial: sup > 0, suppressed: sup, cells: want
   };
 }
+
+/* ---------------------------------------------------------------------
+   Comparability of two years.
+
+   A grade band is the sum of its grades, and suppression can remove a grade
+   from one year and not the other. When that happens the two aggregates
+   describe different sets of grades and the difference between them is not a
+   change over time. D02, Black students, grades 3-5 is the case that found
+   this: grade 3 is suppressed in 2024, so the band was comparing grades 4-5
+   in 2024 against grades 3-5 in 2026 and reporting -1.4pp. Like for like on
+   grades 4 and 5 it is -3.2pp.
+
+   So: no change is computed unless both years rest on exactly the same
+   grades. Where they do not, the change reads `s`.
+   --------------------------------------------------------------------- */
+const comparable = (a, b) => !!a && !!b && a.gmask === b.gmask;
+/* difference in a metric between two aggregates, or null if not like for like */
+function delta(cur, bse, getter){
+  if (!comparable(cur, bse)) return null;
+  return getter(cur) - getter(bse);
+}
+/* the grades a band is actually resting on, for labelling */
+function gradesOf(a){
+  if (!a) return [];
+  const out=[];
+  for (let g=0; g<6; g++) if (a.gmask & (1<<g)) out.push(g+3);
+  return out;
+}
+function bandNote(cur, bse, bandKey){
+  if (bandKey === 'all' || !cur || !bse) return '';
+  if (comparable(cur, bse)) return '';
+  const cg = gradesOf(cur).join(', '), bg = gradesOf(bse).join(', ');
+  return `grades ${bg || 'none'} available in the baseline year against grades ${cg || 'none'} in 2026`;
+}
+
 /* metric accessors — `good` is the direction that counts as improvement */
 const METRICS = {
   prof: { label:'Proficiency (Level 3–4)', short:'% Level 3–4', get:a=>a.prof, good:+1 },
@@ -102,6 +140,42 @@ const VE_FIELDS = {
   msc: { label:'Grades 6–8 curriculum', roster:()=>V.msCurrRoster, get:msCurr, band:'68' },
 };
 const distsWith = (fk, v) => ALL_DIST.filter(i => VE_FIELDS[fk].get(i) === v);
+
+/* ---------------------------------------------------------------------
+   Grade bands are governed by different assignments. The K-5 curriculum and
+   its provider reach tested grades 3 to 5; the middle-school rollout reaches
+   grades 6 to 8. A district can have one provider for K-5 and another for
+   6-8, so a filter or a column that always reads the K-5 field is wrong for
+   the middle grades. D03 is the case that found this: Teaching Matters is its
+   grades 6-8 provider and does not appear in its K-5 assignment at all.
+   --------------------------------------------------------------------- */
+const BAND_SCOPE = { all:'both', '35':'k5', g3:'k5', g4:'k5', g5:'k5',
+                     '68':'ms',  g6:'ms', g7:'ms', g8:'ms' };
+const scopeOf = bk => BAND_SCOPE[bk] || 'both';
+/* every provider / curriculum value that applies to a district for this band */
+function jespFor(i, bk){
+  const sc = scopeOf(bk);
+  return sc==='k5' ? [k5Jesp(i)] : sc==='ms' ? [msJesp(i)]
+       : [k5Jesp(i), msJesp(i)];
+}
+function currFor(i, bk){
+  const sc = scopeOf(bk);
+  return sc==='k5' ? [k5Curr(i)] : sc==='ms' ? [msCurr(i)]
+       : [k5Curr(i), msCurr(i)];
+}
+const phaseFor = (n, bk) => scopeOf(bk)==='ms' ? phaseMsLabel(n) : phaseElemLabel(n);
+/* roster for the filter control, scoped to the band */
+function jespRoster(bk){
+  const sc = scopeOf(bk);
+  const r = sc==='k5' ? V.k5JespRoster : sc==='ms' ? V.msJespRoster
+          : [...new Set([...V.k5JespRoster, ...V.msJespRoster])].sort();
+  return r;
+}
+function currRoster(bk){
+  const sc = scopeOf(bk);
+  return sc==='k5' ? V.k5CurrRoster : sc==='ms' ? V.msCurrRoster
+       : [...new Set([...V.k5CurrRoster, ...V.msCurrRoster])].sort();
+}
 
 const PHASES = {
   elem1: new Set(D.phase.elem1), elem2: new Set(D.phase.elem2),
@@ -144,9 +218,25 @@ function shade(v, lo, hi, hue){
   return `background:rgba(${hue},${a.toFixed(3)});color:${a>0.5?'#fff':'#243447'}`;
 }
 
-const BORO_COLOR = { 'Bronx':'#1C355E', 'Brooklyn':'#0070B9', 'Manhattan':'#00A0DD',
-                     'Queens':'#6D345F', 'Staten Island':'#4F748B' };
-const LVL_COLOR  = ['#C0483C','#E8A33D','#6FB0C7','#1C355E'];
+/* ---------------------------------------------------------------------
+   Colour.
+
+   Five colours are reserved and mean one thing throughout:
+     proficiency (Level 3-4)  CPRL blue
+     Level 1 / Level 2 / Level 3 / Level 4  the performance ramp
+
+   Everything categorical (borough, phase, provider, curriculum, student
+   group) draws from CAT, which contains none of the reserved five. A colour
+   therefore never carries two meanings, on a page or across pages.
+   --------------------------------------------------------------------- */
+const C_PROF = '#0070B9';
+const LVL_COLOR  = ['#C0483C','#E8A33D','#6FB0C7','#1C355E'];   // Level 1 to 4
+const RESERVED = new Set([C_PROF, ...LVL_COLOR]);
+const CAT = ['#6D345F','#0F7B6C','#B0722E','#4F748B','#7C6BAD',
+             '#A0416B','#3F7A3F','#8A5A44','#2E7D8F','#6B6F2E','#5B5EA6'];
+console.assert(!CAT.some(c => RESERVED.has(c)), 'categorical palette reuses a reserved colour');
+const BORO_COLOR = { 'Bronx':CAT[0], 'Brooklyn':CAT[1], 'Manhattan':CAT[2],
+                     'Queens':CAT[3], 'Staten Island':CAT[4] };
 const CSS = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 
 /* =====================================================================
@@ -172,9 +262,9 @@ Chart.defaults.maintainAspectRatio = false;
    is drawn on the first tested year of each wave, not on the launch year.
    --------------------------------------------------------------------- */
 const WAVES = [
-  { k:'elem1', label:'Elementary Phase 1', sy:'SY 2023–24', firstTested:2024, color:'#0070B9' },
-  { k:'elem2', label:'Elementary Phase 2', sy:'SY 2024–25', firstTested:2025, color:'#6D345F' },
-  { k:'ms1',   label:'Middle school Phase 1', sy:'SY 2025–26', firstTested:2026, color:'#00A0DD' },
+  { k:'elem1', label:'Elementary Phase 1', sy:'SY 2023–24', firstTested:2024, color:CAT[5] },
+  { k:'elem2', label:'Elementary Phase 2', sy:'SY 2024–25', firstTested:2025, color:CAT[6] },
+  { k:'ms1',   label:'Middle school Phase 1', sy:'SY 2025–26', firstTested:2026, color:CAT[7] },
 ];
 /* marks for an axis whose categories are MODERN years, optionally offset */
 function markSet(waves, slotOf){
@@ -230,7 +320,7 @@ function markerPlugin(getMarks){
   };
 }
 /* per-page marker toggle */
-const MARKS = { ov:true, bo:true, ph:true, sg:true, ve:true };
+const MARKS = { ov:true, bo:true, ph:true, sg:true, ve:true, di:true };
 const markHTML = waves => waves.map(w =>
   `<span><i class="dot" style="background:${w.color}"></i>${w.label} &middot; launched ${w.sy}, first tested ${w.firstTested}</span>`).join('');
 
@@ -496,8 +586,8 @@ function renderOV(){
   const bl = band(bk).label.toLowerCase();
 
   /* ---- KPIs ---- */
-  const dProf = cur && bse ? cur.prof - bse.prof : null;
-  const dL1   = cur && bse ? cur.l1   - bse.l1   : null;
+  const dProf = delta(cur, bse, a=>a.prof);
+  const dL1   = delta(cur, bse, a=>a.l1);
   const ggAll = ggCount(bk, cat, base);
   $('ov-kpi').innerHTML = [
     kpi('2026 proficiency', cur?f1(cur.prof):'—','%', null, 'Level 3–4 share', 'n'),
@@ -529,7 +619,7 @@ function renderOV(){
   draw('ov-trend', {
     type:'line',
     data:{ labels: MODERN.map(String), datasets:[
-      { label:'Proficient (Level 3–4)', data:S.map(s=>s.a?s.a.prof:null), borderColor:'#0070B9', backgroundColor:'#0070B9',
+      { label:'Proficient (Level 3–4)', data:S.map(s=>s.a?s.a.prof:null), borderColor:C_PROF, backgroundColor:C_PROF,
         tension:.25, borderWidth:3, pointRadius:5, pointHoverRadius:7 },
       { label:'Level 1', data:S.map(s=>s.a?s.a.l1:null), borderColor:'#C0483C', backgroundColor:'#C0483C',
         tension:.25, borderWidth:3, pointRadius:5, pointHoverRadius:7 },
@@ -557,8 +647,10 @@ function renderOV(){
   draw('ov-zero', {
     type:'bar',
     data:{ labels: ['Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8'], datasets:[
-      { label:'Level 1', backgroundColor:LVL_COLOR[0], data: gs.map(a=>a?-a.l1:null), borderWidth:0 },
+      /* Level 2 sits against the axis so Level 1 reads on the outside, the
+         furthest point from proficiency */
       { label:'Level 2', backgroundColor:LVL_COLOR[1], data: gs.map(a=>a?-a.l2:null), borderWidth:0 },
+      { label:'Level 1', backgroundColor:LVL_COLOR[0], data: gs.map(a=>a?-a.l1:null), borderWidth:0 },
       { label:'Level 3', backgroundColor:LVL_COLOR[2], data: gs.map(a=>a? a.l3:null), borderWidth:0 },
       { label:'Level 4', backgroundColor:LVL_COLOR[3], data: gs.map(a=>a? a.l4:null), borderWidth:0 },
     ]},
@@ -571,13 +663,13 @@ function renderOV(){
 
   /* ---- grade movement vs baseline ---- */
   const gk = ['g3','g4','g5','g6','g7','g8'];
-  const dP = gk.map(k => { const a=agg('city',[0],k,2026,cat), b=agg('city',[0],k,base,cat); return a&&b?a.prof-b.prof:null; });
-  const dL = gk.map(k => { const a=agg('city',[0],k,2026,cat), b=agg('city',[0],k,base,cat); return a&&b?a.l1-b.l1:null; });
+  const dP = gk.map(k => delta(agg('city',[0],k,2026,cat), agg('city',[0],k,base,cat), a=>a.prof));
+  const dL = gk.map(k => delta(agg('city',[0],k,2026,cat), agg('city',[0],k,base,cat), a=>a.l1));
   $('ov-grades').closest('.cd').querySelector('[data-png]').textContent = 'PNG';
   draw('ov-grades', {
     type:'bar',
     data:{ labels:['Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8'], datasets:[
-      { label:'Change in proficiency', data:dP, backgroundColor:'#0070B9', borderWidth:0 },
+      { label:'Change in proficiency', data:dP, backgroundColor:C_PROF, borderWidth:0 },
       { label:'Change in Level 1 share', data:dL, backgroundColor:'#C0483C', borderWidth:0 },
     ]},
     options:{ scales:{ x:gridX, y:gridY(`percentage points vs ${base}`,{grid:{color:c=>c.tick.value===0?'#9AA6B2':'#EDF1F5'}}) },
@@ -596,7 +688,7 @@ function renderOV(){
   draw('ov-long', {
     type:'line',
     data:{ labels: longLabels, datasets:[
-      { label:'Proficient (Level 3–4)', data: mk(a=>a.prof), borderColor:'#0070B9', backgroundColor:'#0070B9',
+      { label:'Proficient (Level 3–4)', data: mk(a=>a.prof), borderColor:C_PROF, backgroundColor:C_PROF,
         borderWidth:3, tension:.2, pointRadius:4, spanGaps:false },
       { label:'Level 1', data: mk(a=>a.l1), borderColor:'#C0483C', backgroundColor:'#C0483C',
         borderWidth:3, tension:.2, pointRadius:4, spanGaps:false },
@@ -618,7 +710,7 @@ function ggCount(bk, cat, base){
   let gg=0, total=0;
   for (const i of ALL_DIST){
     const a = agg('dist',[i],bk,2026,cat), b = agg('dist',[i],bk,base,cat);
-    if (!a || !b) continue;
+    if (!comparable(a, b)) continue;          /* like-for-like grades only */
     total++;
     if (a.l1 < b.l1 && a.prof > b.prof) gg++;
   }
@@ -632,6 +724,69 @@ function csvOV(){
   for (const y of YEARS){ const a=agg('city',[0],bk,y,cat);
     rows.push([y, a?a.n:'', a?f2(a.l1):'', a?f2(a.l2):'', a?f2(a.l3):'', a?f2(a.l4):'', a?f2(a.prof):'', a?f1(a.mean):'', y>=2023?'yes':'no (previous standards)']); }
   return rows;
+}
+
+/* ---------------------------------------------------------------------
+   Focus panel.
+
+   The citywide page answers "what happened in the city?". Before comparing
+   districts to each other, people want the same answer for one district or
+   one borough. This renders the citywide blocks (headline numbers, the
+   proficiency and Level 1 trend, the level distribution) for a single
+   geography, and stays hidden until one is chosen.
+   --------------------------------------------------------------------- */
+function renderFocus(prefix, lvl, geoIdx, name, bk, cat, base){
+  const host = $(prefix + '-focus');
+  if (geoIdx == null){ host.style.display = 'none'; return; }
+  host.style.display = '';
+
+  const S = MODERN.map(y => ({ y, a: agg(lvl, [geoIdx], bk, y, cat) }));
+  const cur = S.find(x=>x.y===2026).a, bse = S.find(x=>x.y===base).a;
+  const dProf = delta(cur, bse, a=>a.prof), dL1 = delta(cur, bse, a=>a.l1);
+  const note  = bandNote(cur, bse, bk);
+
+  $(prefix+'-focus-title').textContent = name;
+  $(prefix+'-focus-sub').textContent =
+    `${band(bk).label}, ${CATS[cat] === 'All Students' ? 'all students' : CATS[cat]}, measured against ${base}.`;
+
+  $(prefix+'-focus-kpi').innerHTML = [
+    kpi('2026 proficiency', cur?f1(cur.prof):'—','%', null, 'Level 3–4 share', 'n'),
+    kpi(`Change vs ${base}`, dProf==null?(note?'n/c':'—'):pp(dProf),'pp', null,
+        note ? 'Not comparable on these grades' : 'Percentage points',
+        dProf==null?'n':dProf>0?'g':'b'),
+    kpi('2026 Level 1', cur?f1(cur.l1):'—','%', null, 'Lowest performance level', 'n'),
+    kpi(`Change vs ${base}`, dL1==null?(note?'n/c':'—'):pp(dL1),'pp', null,
+        note ? 'Not comparable on these grades' : 'Fewer Level 1s is better',
+        dL1==null?'n':dL1<0?'g':'b'),
+    kpi('Students tested', cur?num(cur.n):'—','', null, `2026, ${band(bk).label.toLowerCase()}`, 'n'),
+    kpi('Mean scale score', cur?f1(cur.mean):'—','', null, '2026', 'n'),
+  ].join('');
+
+  $(prefix+'-focus-note').innerHTML = note
+    ? `<div class="note warn" style="margin-bottom:0"><b>Not comparable across these years.</b> ${esc(note)}, so no change is reported.</div>` : '';
+
+  draw(prefix+'-focus-trend', {
+    type:'line',
+    data:{ labels:MODERN.map(String), datasets:[
+      { label:'Proficient (Level 3–4)', data:S.map(x=>x.a?x.a.prof:null),
+        borderColor:C_PROF, backgroundColor:C_PROF, borderWidth:3, tension:.25, pointRadius:5 },
+      { label:'Level 1', data:S.map(x=>x.a?x.a.l1:null),
+        borderColor:LVL_COLOR[0], backgroundColor:LVL_COLOR[0], borderWidth:3, tension:.25, pointRadius:5 },
+    ]},
+    options:{ scales:{ x:gridX, y:gridY('% of students tested',{beginAtZero:true,suggestedMax:80}) },
+      plugins:{ legend:{position:'bottom'}, tooltip:ppTip('%') } },
+    plugins:[markerPlugin(() => MARKS[prefix] ? markSet(WAVES, MODERN_SLOT) : [])]
+  });
+
+  draw(prefix+'-focus-dist', {
+    type:'bar',
+    data:{ labels:MODERN.map(String), datasets:[0,1,2,3].map(i=>({
+      label:`Level ${i+1}`, backgroundColor:LVL_COLOR[i], borderWidth:0,
+      data:S.map(x=>x.a?[x.a.l1,x.a.l2,x.a.l3,x.a.l4][i]:null) })) },
+    options:{ scales:{ x:Object.assign({stacked:true},gridX),
+        y:gridY('% of students tested',{stacked:true,max:100}) },
+      plugins:{ legend:{display:false}, tooltip:ppTip('%') } }
+  });
 }
 
 /* =====================================================================
@@ -651,17 +806,32 @@ function initDI(){
     { v:'ms1',   t:'Middle school Phase 1 · SY 2025–26', n:D.phase.ms1.length },
     { v:'ms2',   t:'Middle school Phase 2 · SY 2026–27', n:D.phase.ms2.length },
   ], renderDI, 'All phases');
-  multiSelect('di-ms-reads', 'K–5 provider (JESP)',
-    V.k5JespRoster.map(v => ({ v, t:v, n: distsWith('k5j',v).length })), renderDI, 'All providers');
-  multiSelect('di-ms-curr', 'K–5 curriculum',
-    V.k5CurrRoster.map(c => ({ v:c, t:c, n: distsWith('k5c',c).length })), renderDI, 'All curricula');
+  fill($('di-focus-sel'), [{v:'',t:'All districts (comparison view)'}]
+    .concat(D.districts.map((d,i)=>({ v:i, t:`District ${d} · ${D.districtBoro[i]}` }))));
+  on($('di-focus-sel'), renderDI);
+  buildDIAssignmentPickers();
   on($('di-dim'), () => { fillCats($('di-dim'), $('di-cat')); renderDI(); });
-  ['di-base','di-grade','di-cat','di-metric'].forEach(id => on($(id), renderDI));
+  on($('di-grade'), () => {   /* the assignment fields follow the grade band */
+    msSel('di-ms-reads').clear(); msSel('di-ms-curr').clear();
+    buildDIAssignmentPickers(); renderDI(); });
+  ['di-base','di-cat','di-metric'].forEach(id => on($(id), renderDI));
   $('di-reset').onclick = () => {
     ['di-ms-boro','di-ms-phase','di-ms-reads','di-ms-curr'].forEach(k => msSel(k).clear());
+    $('di-focus-sel').value = '';
     initDI(); renderDI();
   };
 }
+function buildDIAssignmentPickers(){
+  const bk = $('di-grade').value, sc = scopeOf(bk);
+  const lbl = sc==='k5' ? 'K–5' : sc==='ms' ? 'Grades 6–8' : 'Any';
+  multiSelect('di-ms-reads', `${lbl} provider (JESP)`,
+    jespRoster(bk).map(v => ({ v, t:v, n: ALL_DIST.filter(i=>jespFor(i,bk).includes(v)).length })),
+    renderDI, 'All providers');
+  multiSelect('di-ms-curr', `${lbl} curriculum`,
+    currRoster(bk).map(c => ({ v:c, t:c, n: ALL_DIST.filter(i=>currFor(i,bk).includes(c)).length })),
+    renderDI, 'All curricula');
+}
+
 function diRows(){
   const base=+$('di-base').value, bk=$('di-grade').value, cat=+$('di-cat').value;
   const out=[];
@@ -671,17 +841,21 @@ function diRows(){
     if (!msPass('di-ms-boro', b)) continue;
     const phases = ['elem1','elem2','ms1','ms2'].filter(k => PHASES[k].has(n));
     if (!msPass('di-ms-phase', phases)) continue;
-    if (!msPass('di-ms-reads', k5Jesp(i))) continue;
-    if (!msPass('di-ms-curr', k5Curr(i))) continue;
+    if (!msPass('di-ms-reads', jespFor(i, bk).filter(Boolean))) continue;
+    if (!msPass('di-ms-curr',  currFor(i, bk).filter(Boolean))) continue;
     const cur = agg('dist',[i],bk,2026,cat), bse = agg('dist',[i],bk,base,cat);
     out.push({
       i, n, boro:b, label:`District ${D.districts[i]}`,
       elem: phaseElemLabel(n), ms: phaseMsLabel(n),
-      reads: k5Jesp(i), ec: k5Curr(i), msj: msJesp(i), mc: msCurr(i),
+      k5j: k5Jesp(i), k5c: k5Curr(i), msj: msJesp(i), msc: msCurr(i),
+      reads: jespFor(i, bk).filter(Boolean).join(' / '),
+      ec:    currFor(i, bk).filter(Boolean).join(' / '),
+      phase: phaseFor(n, bk),
       cur, bse,
-      dprof: cur&&bse ? cur.prof-bse.prof : null,
-      dl1:   cur&&bse ? cur.l1  -bse.l1   : null,
-      dn:    cur&&bse&&bse.n ? (cur.n-bse.n)/bse.n*100 : null,
+      dprof: delta(cur, bse, a=>a.prof),
+      dl1:   delta(cur, bse, a=>a.l1),
+      dn:    comparable(cur,bse) && bse.n ? (cur.n-bse.n)/bse.n*100 : null,
+      bandNote: bandNote(cur, bse, bk),
     });
   }
   return out;
@@ -713,7 +887,20 @@ function renderDI(){
     kpi('Improved on both', `${nGG}`, `/${valid.length}`, null, best?`Largest proficiency gain: District ${D.districts[best.i]} (${pp(best.dprof)}pp)`:'', nGG>valid.length/2?'g':'n'),
   ].join('');
 
+  const fsel = $('di-focus-sel').value;
+  renderFocus('di', 'dist', fsel==='' ? null : +fsel,
+              fsel==='' ? '' : `District ${D.districts[+fsel]}`,
+              $('di-grade').value, +$('di-cat').value, base);
+
   activeBar('di-active', 'di', 32, `${rows.length} of 32 districts`);
+
+  /* districts whose grade band rests on different grades in the two years */
+  const nc = rows.filter(r => r.bandNote);
+  $('di-nc').innerHTML = nc.length
+    ? `<div class="note warn"><b>${nc.length} district${nc.length===1?'':'s'} cannot be compared across these two years on this grade band.</b> `
+      + `Suppression removes a grade from one year and not the other, so the two figures would describe different grades. Those changes read <b>n/c</b> rather than a number. `
+      + nc.map(r=>`District&nbsp;${D.districts[r.i]} (${esc(r.bandNote)})`).join('; ') + `.</div>`
+    : '';
 
   $('di-insight').innerHTML = valid.length
     ? `Measured from <b>${base}</b> to <b>2026</b> on ${bl}, ${gl.toLowerCase()}: <b>${nDnL}</b> of ${valid.length} districts reduced their Level&nbsp;1 share and <b>${nUpP}</b> raised proficiency; <b>${nGG}</b> did both. `
@@ -789,8 +976,8 @@ function renderDI(){
     + '<span class="muted">Bubble size reflects students tested in 2026.</span>';
 
   /* ---- ranked bars ---- */
-  const rk = rows.filter(r=>r.cur&&r.bse).map(r=>({ ...r, v: M.get(r.cur)-M.get(r.bse) }))
-                 .sort((a,b)=> (b.v-a.v)*M.good );
+  const rk = rows.map(r=>({ ...r, v: delta(r.cur, r.bse, M.get) }))
+                 .filter(r=>r.v!=null).sort((a,b)=> (b.v-a.v)*M.good );
   draw('di-rank', {
     type:'bar',
     data:{ labels: rk.map(r=>'D'+D.districts[r.i]), datasets:[{
@@ -863,31 +1050,45 @@ function renderCohort(rows, base){
     + `A district's result is a percentage of whoever sat the test, so a cohort that changes size by a tenth is a competing explanation for a large measured gain. This does not say the gains are not real; it says cohort change has to be ruled out before they are attributed to instruction.`;
 }
 
-const DI_COLS = [
-  {k:'label', t:'District',    sort:r=>r.n,           kind:'name'},
-  {k:'boro',  t:'Borough',     sort:r=>r.boro,        kind:'text'},
-  {k:'elem',  t:'Elem phase',  sort:r=>r.elem,        kind:'text'},
-  {k:'ms',    t:'MS phase',    sort:r=>r.ms,          kind:'text'},
-  {k:'reads', t:'K–5 provider', sort:r=>r.reads, kind:'wrap'},
-  {k:'ec',    t:'K–5 curriculum',   sort:r=>r.ec,      kind:'text'},
-  {k:'n',     t:'Tested 2026', sort:r=>r.cur?r.cur.n:-1,        kind:'num'},
-  {k:'dn',    t:'Δ tested %',  sort:r=>r.dn==null?-999:r.dn,     kind:'heat', good:0, scale:12},
-  {k:'prof',  t:'% L3–4 2026', sort:r=>r.cur?r.cur.prof:-1, kind:'lvl', hue:'0,112,185', lo:20, hi:80},
-  {k:'dprof', t:'Δ L3–4',  sort:r=>r.dprof==null?-99:r.dprof, kind:'heat', good:+1, scale:8},
-  {k:'l1',    t:'% L1 2026',   sort:r=>r.cur?r.cur.l1:-1,       kind:'lvl', hue:'192,72,60', lo:5, hi:45},
-  {k:'dl1',   t:'Δ L1',   sort:r=>r.dl1==null?99:r.dl1,    kind:'heat', good:-1, scale:8},
-  {k:'l4',    t:'% L4 2026',   sort:r=>r.cur?r.cur.l4:-1,       kind:'lvl', hue:'28,53,94', lo:2, hi:45},
-  {k:'mean',  t:'Mean score',  sort:r=>r.cur?r.cur.mean:-1,     kind:'mean'},
-  {k:'sig',   t:'Signal',      sort:r=>signal(r).rank,          kind:'sig'},
-];
+/* Columns follow the selected grade band: elementary grades show the K-5
+   phase, provider and curriculum; middle grades show the 6-8 ones; all grades
+   shows both, since both are in play. */
+function diCols(bk){
+  const sc = scopeOf(bk);
+  const assign = sc === 'both'
+    ? [ {k:'phaseBoth', t:'Phase (elem / MS)', sort:r=>r.elem+r.ms, kind:'phaseBoth'},
+        {k:'k5j', t:'K–5 provider',   sort:r=>r.k5j, kind:'wrap'},
+        {k:'k5c', t:'K–5 curriculum', sort:r=>r.k5c, kind:'text'},
+        {k:'msj', t:'6–8 provider',   sort:r=>r.msj, kind:'wrap'},
+        {k:'msc', t:'6–8 curriculum', sort:r=>r.msc, kind:'text'} ]
+    : [ {k:'phase', t:sc==='ms'?'MS phase':'Elem phase', sort:r=>r.phase, kind:'text'},
+        {k:'reads', t:sc==='ms'?'6–8 provider':'K–5 provider',     sort:r=>r.reads, kind:'wrap'},
+        {k:'ec',    t:sc==='ms'?'6–8 curriculum':'K–5 curriculum', sort:r=>r.ec,    kind:'text'} ];
+  return [
+    {k:'label', t:'District', sort:r=>r.n,    kind:'name'},
+    {k:'boro',  t:'Borough',  sort:r=>r.boro, kind:'text'},
+    ...assign,
+    {k:'n',     t:'Tested 2026', sort:r=>r.cur?r.cur.n:-1,     kind:'num'},
+    {k:'dn',    t:'Δ tested %',  sort:r=>r.dn==null?-999:r.dn, kind:'heat', good:0, scale:12},
+    {k:'prof',  t:'% L3–4 2026', sort:r=>r.cur?r.cur.prof:-1,  kind:'lvl', hue:'0,112,185', lo:20, hi:80},
+    {k:'dprof', t:'Δ L3–4',      sort:r=>r.dprof==null?-99:r.dprof, kind:'heat', good:+1, scale:8},
+    {k:'l1',    t:'% L1 2026',   sort:r=>r.cur?r.cur.l1:-1,    kind:'lvl', hue:'192,72,60', lo:5, hi:45},
+    {k:'dl1',   t:'Δ L1',        sort:r=>r.dl1==null?99:r.dl1, kind:'heat', good:-1, scale:8},
+    {k:'l4',    t:'% L4 2026',   sort:r=>r.cur?r.cur.l4:-1,    kind:'lvl', hue:'28,53,94', lo:2, hi:45},
+    {k:'mean',  t:'Mean score',  sort:r=>r.cur?r.cur.mean:-1,  kind:'mean'},
+    {k:'sig',   t:'Signal',      sort:r=>signal(r).rank,       kind:'sig'},
+  ];
+}
+
 function renderDITable(rows, base){
-  const col = DI_COLS.find(c=>c.k===DI.sort) || DI_COLS[6];
+  const COLS = diCols($('di-grade').value);
+  const col = COLS.find(c=>c.k===DI.sort) || COLS.find(c=>c.k==='dprof');
   const sorted = rows.slice().sort((a,b)=>{
     const x=col.sort(a), y=col.sort(b);
     if (typeof x === 'string') return DI.dir * x.localeCompare(y);
     return DI.dir * (y-x);
   });
-  const head = DI_COLS.map(c =>
+  const head = COLS.map(c =>
     `<th data-sort="${c.k}">${c.t}${DI.sort===c.k?` <span class="ar">${DI.dir>0?'▼':'▲'}</span>`:''}</th>`).join('');
   const body = sorted.map(r => {
     const s = signal(r);
@@ -895,17 +1096,20 @@ function renderDITable(rows, base){
       switch(c.kind){
         case 'name': return `<td class="nm">District ${D.districts[r.i]}</td>`;
         case 'text': return `<td>${esc(r[c.k]) || '<span class="muted">—</span>'}</td>`;
-        case 'wrap': return `<td style="white-space:normal;min-width:140px">${esc(r.reads) || '<span class="muted">—</span>'}</td>`;
+        case 'wrap': return `<td style="white-space:normal;min-width:140px">${esc(r[c.k]) || '<span class="muted">—</span>'}</td>`;
+        case 'phaseBoth': return `<td style="white-space:normal">${esc(r.elem)}<br><span class="muted">${esc(r.ms)}</span></td>`;
         case 'num':  return `<td>${r.cur?num(r.cur.n):'<span class="sup">s</span>'}</td>`;
         case 'lvl':  { const v = r.cur ? (c.k==='prof'?r.cur.prof:c.k==='l1'?r.cur.l1:r.cur.l4) : null;
                        return `<td><span class="cell" style="${shade(v,c.lo,c.hi,c.hue)}">${v==null?'s':f1(v)}</span></td>`; }
         case 'heat': { const v = r[c.k];
+                       if (v==null && r.bandNote)
+                         return `<td><span class="cell nc" title="Not comparable: ${esc(r.bandNote)}">n/c</span></td>`;
                        return `<td><span class="cell" style="${heat(v,c.scale,c.good)}">${v==null?'s':pp(v)}</span></td>`; }
         case 'mean': return `<td>${r.cur?f1(r.cur.mean):'<span class="sup">s</span>'}</td>`;
         case 'sig':  return `<td><span class="tag" style="background:${s.c}">${s.t}</span></td>`;
       }
     };
-    return `<tr>${DI_COLS.map(cell).join('')}</tr>`;
+    return `<tr>${COLS.map(cell).join('')}</tr>`;
   }).join('');
   const t = $('di-table');
   t.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
@@ -988,13 +1192,15 @@ function renderBO(){
 
   const shown = boShown();
   const dshown = boDistricts();
+  renderFocus('bo', 'boro', shown.length === 1 ? shown[0] : null,
+              shown.length === 1 ? D.boros[shown[0]] : '', bk, cat, base);
   activeBar('bo-active', 'bo', 5, `${shown.length} of 5 boroughs · ${dshown.length} of 32 districts`);
 
   const series = shown.map(i => ({ i, name:D.boros[i],
     vals: MODERN.map(y => { const a = agg('boro',[i],bk,y,cat); return a ? M.get(a) : null; }),
     cur: agg('boro',[i],bk,2026,cat), bse: agg('boro',[i],bk,base,cat) }));
 
-  const moved = series.filter(s=>s.cur&&s.bse).map(s=>({ ...s, d: M.get(s.cur)-M.get(s.bse) }));
+  const moved = series.map(s=>({ ...s, d: delta(s.cur, s.bse, M.get) })).filter(s=>s.d!=null);
   const bestB = moved.slice().sort((a,b)=>(b.d-a.d)*M.good)[0];
   $('bo-insight').innerHTML = moved.length
     ? `On ${bl}, ${gl.toLowerCase()}, ${M.label.toLowerCase()} in 2026 ranges from <b>${f1(Math.min(...moved.map(s=>M.get(s.cur))))}</b> to <b>${f1(Math.max(...moved.map(s=>M.get(s.cur))))}</b> across the five boroughs. `
@@ -1114,12 +1320,12 @@ function renderPH(){
   const cat=+$('ph-cat').value, mk=$('ph-metric').value, M=METRICS[mk];
   const gl = groupLabel($('ph-dim'),$('ph-cat'));
   const G = {
-    e1: { name:'Elementary Phase 1', ds:D.phase.elem1, band:'35', color:'#0070B9' },
-    e2: { name:'Elementary Phase 2', ds:D.phase.elem2, band:'35', color:'#6D345F' },
-    m1: { name:'Middle school Phase 1', ds:D.phase.ms1, band:'68', color:'#0070B9' },
-    m0: { name:'Not yet in middle school rollout', ds:ALL_DIST.map(distNum).filter(n=>!PHASES.ms1.has(n)), band:'68', color:'#4F748B' },
-    p1: { name:'Elementary Phase 1 districts', ds:D.phase.elem1, band:'68', color:'#0070B9' },
-    p2: { name:'Elementary Phase 2 districts', ds:D.phase.elem2, band:'68', color:'#6D345F' },
+    e1: { name:'Elementary Phase 1', ds:D.phase.elem1, band:'35', color:CAT[5] },
+    e2: { name:'Elementary Phase 2', ds:D.phase.elem2, band:'35', color:CAT[6] },
+    m1: { name:'Middle school Phase 1', ds:D.phase.ms1, band:'68', color:CAT[7] },
+    m0: { name:'Not yet in middle school rollout', ds:ALL_DIST.map(distNum).filter(n=>!PHASES.ms1.has(n)), band:'68', color:CAT[3] },
+    p1: { name:'Elementary Phase 1 districts', ds:D.phase.elem1, band:'68', color:CAT[5] },
+    p2: { name:'Elementary Phase 2 districts', ds:D.phase.elem2, band:'68', color:CAT[6] },
   };
   const ser = g => MODERN.map(y => { const a = phaseAgg(g.ds, g.band, y, cat); return a ? M.get(a) : null; });
   const lineOpts = (title) => ({ scales:{ x:gridX, y:gridY(title) },
@@ -1146,8 +1352,8 @@ function renderPH(){
     const cells = gs.map(g => {
       const o = {};
       for (const y of MODERN) o[y] = phaseAgg(g.ds, g.band, y, cat);
-      return { g, o, d23: o[2026]&&o[2023] ? M.get(o[2026])-M.get(o[2023]) : null,
-                    d24: o[2026]&&o[2024] ? M.get(o[2026])-M.get(o[2024]) : null };
+      return { g, o, d23: delta(o[2026], o[2023], M.get),
+                    d24: delta(o[2026], o[2024], M.get) };
     });
     const diff23 = cells[0].d23!=null && cells[1].d23!=null ? cells[0].d23-cells[1].d23 : null;
     const diff24 = cells[0].d24!=null && cells[1].d24!=null ? cells[0].d24-cells[1].d24 : null;
@@ -1242,7 +1448,7 @@ function renderSG(){
   const where = lvl==='city' ? 'New York City' : lvl==='boro' ? D.boros[geo] : `District ${D.districts[geo]}`;
   $('sg-trendsub').textContent = `${M.label} by ${dim.label.toLowerCase()}, ${where}, ${band(bk).label.toLowerCase()}, 2023 to 2026.`;
 
-  const PAL = ['#1C355E','#0070B9','#00A0DD','#6D345F','#4F748B','#6FB0C7','#C0483C'];
+  const PAL = CAT;
   const series = dim.cats.map((c,i) => ({
     c, name:CATS[c], color:PAL[i%PAL.length],
     vals: MODERN.map(y => { const a=agg(lvl,[geo],bk,y,c); return a?M.get(a):null; }),
@@ -1265,8 +1471,8 @@ function renderSG(){
     `<thead><tr><th class="nos">Group</th><th class="nos">Tested</th><th class="nos">% L1</th>
       <th class="nos">% L3–4</th><th class="nos">Δ vs 2023</th><th class="nos">Δ vs 2024</th></tr></thead><tbody>`
     + series.map(s=>{
-        const d23 = s.cur&&s.b23 ? M.get(s.cur)-M.get(s.b23) : null;
-        const d24 = s.cur&&s.b24 ? M.get(s.cur)-M.get(s.b24) : null;
+        const d23 = delta(s.cur, s.b23, M.get);
+        const d24 = delta(s.cur, s.b24, M.get);
         return `<tr><td class="nm">${esc(s.name)}</td>
           <td>${s.cur?num(s.cur.n):'<span class="sup">s</span>'}</td>
           <td>${s.cur?f1(s.cur.l1):'<span class="sup">s</span>'}</td>
@@ -1327,9 +1533,9 @@ function csvSG(){
     4 and 6 in 2025."  Grades 3 and 7 are not named. */
 const CBT_YEAR = { 3:null, 4:2025, 5:2024, 6:2025, 7:null, 8:2024 };
 const TF_GROUPS = [
-  { k:'y24', name:'Moved to computer in 2024', grades:[5,8], color:'#0070B9' },
-  { k:'y25', name:'Moved to computer in 2025', grades:[4,6], color:'#6D345F' },
-  { k:'pap', name:'Not named in the transition', grades:[3,7], color:'#4F748B' },
+  { k:'y24', name:'Moved to computer in 2024', grades:[5,8], color:CAT[0] },
+  { k:'y25', name:'Moved to computer in 2025', grades:[4,6], color:CAT[1] },
+  { k:'pap', name:'Not named in the transition', grades:[3,7], color:CAT[3] },
 ];
 function initTF(){
   fillMetrics($('tf-metric'), ['prof','l1','l4','mean'], 'prof');
@@ -1472,10 +1678,10 @@ function initVE(){
         ? ds.map(i=>`<span class="chip">D${D.districts[i]}</span>`).join('')
         : '<span class="muted">No district in the ELA files</span>'}</td></tr>`;
   $('ve-roster').innerHTML =
-    `<thead><tr><th class="nos">K–5 provider (JESP)</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
+    `<thead><tr><th class="nos">K–5 provider (JESP)</th><th class="nos"># of districts</th><th class="nos">Districts</th></tr></thead><tbody>`
     + V.k5JespRoster.map(v => row(v, distsWith('k5j',v))).join('') + `</tbody>`;
   $('ve-roster2').innerHTML =
-    `<thead><tr><th class="nos">K–5 curriculum</th><th class="nos">Districts</th><th class="nos">Which</th></tr></thead><tbody>`
+    `<thead><tr><th class="nos">K–5 curriculum</th><th class="nos"># of districts</th><th class="nos">Districts</th></tr></thead><tbody>`
     + V.k5CurrRoster.map(c => row(c, distsWith('k5c',c))).join('') + `</tbody>`;
   /* the chart's own Phase column disagrees with the launch timeline; say so */
   $('ve-phasenote').innerHTML = (V.phaseDisagree||[]).length
@@ -1509,8 +1715,8 @@ function renderVE(){
   const rows = groups.map(g => {
     const cur = agg('dist', g.ds, bk, 2026, cat);
     const bse = agg('dist', g.ds, bk, base, cat);
-    return { ...g, cur, bse, d: cur && bse ? M.get(cur)-M.get(bse) : null };
-  }).filter(r => r.cur && r.bse);
+    return { ...g, cur, bse, d: delta(cur, bse, M.get) };
+  }).filter(r => r.cur && r.bse && r.d != null);
   const ranked = rows.slice().sort((a,b)=>(M.get(b.cur)-M.get(a.cur))*M.good);
 
   $('ve-sub').textContent = `${M.label}, ${band(bk).label.toLowerCase()}, ${groupLabel($('ve-dim'),$('ve-cat')).toLowerCase()}.`;
@@ -1530,8 +1736,7 @@ function renderVE(){
     sub: `${r.ds.length} district${r.ds.length===1?'':'s'} · ${num(r.cur.n)} tested in 2026`,
   })), { baseYear: base, unit, good: M.good, axisLabel: M.short });
 
-  const PAL=['#1C355E','#0070B9','#00A0DD','#6D345F','#4F748B','#6FB0C7','#C0483C','#E8A33D',
-             '#0F7B6C','#8A5A44','#7C6BAD'];
+  const PAL = CAT;
   draw('ve-trend', {
     type:'line',
     data:{ labels:MODERN.map(String), datasets: ranked.map((r,i)=>({
@@ -1547,10 +1752,10 @@ function renderVE(){
   /* the table always carries every group, filtered or not */
   const full = all.map(g => {
     const cur = agg('dist', g.ds, bk, 2026, cat), bse = agg('dist', g.ds, bk, base, cat);
-    return { ...g, cur, bse, d: cur && bse ? M.get(cur)-M.get(bse) : null, shown: groups.some(x=>x.name===g.name) };
+    return { ...g, cur, bse, d: delta(cur, bse, M.get), shown: groups.some(x=>x.name===g.name) };
   }).filter(r=>r.cur).sort((a,b)=>(M.get(b.cur)-M.get(a.cur))*M.good);
   const head = `<thead><tr><th class="nos">${esc(VE_FIELDS[fk].label)}</th>
-    <th class="nos">Districts</th><th class="nos">Tested 2026</th>`
+    <th class="nos"># of districts</th><th class="nos">Tested 2026</th>`
     + MODERN.map(y=>`<th class="nos">${y}</th>`).join('')
     + `<th class="nos">Δ ${base}→2026</th></tr></thead>`;
   $('ve-table').innerHTML = head + '<tbody>' + full.map(r =>
@@ -1564,11 +1769,13 @@ function renderVE(){
   const anomaly = base === 2025
     ? ` <b>Note the baseline.</b> 2025 sits well above 2024 and 2026 everywhere in the city, so measuring from 2025 makes almost every group look negative. That is a property of the baseline year, not of these groups — compare against 2023 or 2024 as well before reading anything into it.`
     : '';
+  /* the count follows the filters rather than always reading 32 */
+  const shownDistricts = new Set(ranked.flatMap(r => r.ds)).size;
   $('ve-insight').innerHTML = ranked.length
-    ? `Grouping the 32 districts by ${kindLabel}, on ${band(bk).label.toLowerCase()}: `
-      + `in 2026 the ${ranked.length} charted groups run from <b>${f1(M.get(ranked[ranked.length-1].cur))}</b> to <b>${f1(M.get(ranked[0].cur))}</b>, `
+    ? `Grouping ${shownDistricts} district${shownDistricts===1?'':'s'} by ${kindLabel}, on ${band(bk).label.toLowerCase()}: `
+      + `in 2026 the ${ranked.length} charted group${ranked.length===1?'':'s'} run from <b>${f1(M.get(ranked[ranked.length-1].cur))}</b> to <b>${f1(M.get(ranked[0].cur))}</b>, `
       + `and their change from ${base} runs from <b>${pp(Math.min(...ranked.map(r=>r.d)))}</b> to <b>${pp(Math.max(...ranked.map(r=>r.d)))}${unit}</b>. `
-      + `Groups differ far more in where they started than in how they moved, which is what you would expect when districts were not assigned to ${kindLabel}s for comparison.`
+      + `Because districts started at different proficiency levels, differences across ${kindLabel}s should not be interpreted as ${kindLabel} effects.`
       + anomaly
     : 'No group passes the current filters.';
   $('ve-overlap').innerHTML = bandMismatch

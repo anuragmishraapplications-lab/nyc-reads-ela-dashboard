@@ -47,16 +47,16 @@ C={'city':load(os.path.join(R,'data','citywide-ela-results-public.xlsx'),None),
    'dist':load(os.path.join(R,'data','district-ela-results-public.xlsx'),'District')}
 
 def A(lvl,gids,bk,year,cat):
-    n=c1=c2=c3=c4=0; wm=0.0; found=False
+    n=c1=c2=c3=c4=0; wm=0.0; found=False; gset=set()
     for gid in gids:
         for g in BANDS[bk]:
             v=C[lvl].get((gid,g,year,CATS[cat] if isinstance(cat,int) else cat))
             if v is None: continue
-            found=True; nt,ms,a,b,c,d=v
+            found=True; gset.add(g); nt,ms,a,b,c,d=v
             n+=nt;c1+=a;c2+=b;c3+=c;c4+=d;wm+=ms*nt
     if not found or n==0: return None
     return dict(n=n,l1=c1/n*100,l2=c2/n*100,l3=c3/n*100,l4=c4/n*100,
-                prof=(c3+c4)/n*100,mean=wm/n)
+                prof=(c3+c4)/n*100,mean=wm/n,gset=frozenset(gset))
 MET={'prof':'prof','l1':'l1','l4':'l4','mean':'mean'}
 GOOD={'prof':1,'l1':-1,'l4':1,'mean':1}
 
@@ -88,8 +88,10 @@ for e in P2:
         # diverging chart: L1/L2 plotted negative, L3/L4 positive, by grade
         for gi,g in enumerate(['g3','g4','g5','g6','g7','g8']):
             a=A('city',['city'],g,zy,cat)
-            cmp(f'ov-zero L1 {e["st"]} {g}', e['zero'][0]['v'][gi], -a['l1'] if a else None, 1e-5)
-            cmp(f'ov-zero L2 {e["st"]} {g}', e['zero'][1]['v'][gi], -a['l2'] if a else None, 1e-5)
+            # dataset order is Level 2 then Level 1: Level 2 sits against the
+            # axis so Level 1 reads on the outside
+            cmp(f'ov-zero L2 {e["st"]} {g}', e['zero'][0]['v'][gi], -a['l2'] if a else None, 1e-5)
+            cmp(f'ov-zero L1 {e["st"]} {g}', e['zero'][1]['v'][gi], -a['l1'] if a else None, 1e-5)
             cmp(f'ov-zero L3 {e["st"]} {g}', e['zero'][2]['v'][gi],  a['l3'] if a else None, 1e-5)
             cmp(f'ov-zero L4 {e["st"]} {g}', e['zero'][3]['v'][gi],  a['l4'] if a else None, 1e-5)
         # long view: 2022 in slot 0, blank slot 1, then 2023-2026
@@ -114,7 +116,8 @@ for e in P2:
             exp=[]
             for d in ds:
                 cur=A('dist',[d],bk,2026,0); bse=A('dist',[d],bk,base,0)
-                if cur and bse: exp.append((cur['l1']-bse['l1'], cur['prof']-bse['prof']))
+                if cur and bse and cur['gset']==bse['gset']:
+                    exp.append((cur['l1']-bse['l1'], cur['prof']-bse['prof']))
             got=sorted([(pt['x'],pt['y']) for pt in pts.get(b,[])])
             exp=sorted(exp)
             cmp(f'di-scatter count {b} {e["st"]}', len(got), len(exp))
@@ -126,7 +129,7 @@ for e in P2:
         exp=[]
         for d in DISTRICTS:
             cur=A('dist',[d],bk,2026,0); bse=A('dist',[d],bk,base,0)
-            if cur and bse: exp.append(('D'+d, cur[key]-bse[key]))
+            if cur and bse and cur['gset']==bse['gset']: exp.append(('D'+d, cur[key]-bse[key]))
         exp.sort(key=lambda t:-t[1]*GOOD[mk])
         cmp(f'di-rank labels {e["st"]}', e['rlab'], [t[0] for t in exp])
         for i,(lab,v) in enumerate(exp):

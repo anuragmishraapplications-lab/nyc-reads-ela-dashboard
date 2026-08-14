@@ -44,15 +44,18 @@ C={'city':load(os.path.join(R,'data','citywide-ela-results-public.xlsx'),None),
    'dist':load(os.path.join(R,'data','district-ela-results-public.xlsx'),'District')}
 
 def A(lvl, gids, bk, year, cat):
-    n=c1=c2=c3=c4=0; wm=0.0; found=False
+    # gset records which grades actually contributed, so the audit can apply the
+    # same like-for-like rule the dashboard applies before reporting a change
+    n=c1=c2=c3=c4=0; wm=0.0; found=False; gset=set()
     for gid in gids:
         for g in BANDS[bk]:
             v=C[lvl].get((gid,g,year,CATS[cat] if isinstance(cat,int) else cat))
             if v is None: continue
-            found=True; nt,ms,a,b,c,d=v
+            found=True; gset.add(g); nt,ms,a,b,c,d=v
             n+=nt;c1+=a;c2+=b;c3+=c;c4+=d;wm+=ms*nt
     if not found or n==0: return None
-    return dict(n=n,l1=c1/n*100,l2=c2/n*100,l3=c3/n*100,l4=c4/n*100,prof=(c3+c4)/n*100,mean=wm/n,l4v=c4/n*100)
+    return dict(n=n,l1=c1/n*100,l2=c2/n*100,l3=c3/n*100,l4=c4/n*100,prof=(c3+c4)/n*100,
+                mean=wm/n,l4v=c4/n*100,gset=frozenset(gset))
 MET={'prof':'prof','l1':'l1','l4':'l4','mean':'mean'}
 
 from decimal import Decimal, ROUND_HALF_UP
@@ -85,13 +88,17 @@ for e in REN:
         cur=A('city',['city'],bk,2026,cat); bse=A('city',['city'],bk,base,cat)
         k=e['kpi']
         cmp(f'ov kpi prof {e["st"]}', k[0], (f1(cur['prof']) if cur else '—')+'%')
-        cmp(f'ov kpi dprof {e["st"]}', k[1], (ppf(cur['prof']-bse['prof']) if cur and bse else '—')+'pp')
+        comp = cur and bse and cur['gset']==bse['gset']
+        cmp(f'ov kpi dprof {e["st"]}', k[1], (ppf(cur['prof']-bse['prof']) if comp else '—')+'pp')
         cmp(f'ov kpi l1 {e["st"]}', k[2], (f1(cur['l1']) if cur else '—')+'%')
-        cmp(f'ov kpi dl1 {e["st"]}', k[3], (ppf(cur['l1']-bse['l1']) if cur and bse else '—')+'pp')
+        cmp(f'ov kpi dl1 {e["st"]}', k[3], (ppf(cur['l1']-bse['l1']) if comp else '—')+'pp')
         cmp(f'ov kpi n {e["st"]}', k[4], numf(cur['n']) if cur else '—')
-        gg=sum(1 for d in DISTRICTS
-               if (lambda a,b: a and b and a['l1']<b['l1'] and a['prof']>b['prof'])(A('dist',[d],bk,2026,cat),A('dist',[d],bk,base,cat)))
-        tot=sum(1 for d in DISTRICTS if A('dist',[d],bk,2026,cat) and A('dist',[d],bk,base,cat))
+        def _pair(d):
+            a=A('dist',[d],bk,2026,cat); b=A('dist',[d],bk,base,cat)
+            return (a,b) if a and b and a['gset']==b['gset'] else (None,None)
+        gg=sum(1 for d in DISTRICTS if _pair(d)[0] and _pair(d)[0]['l1']<_pair(d)[1]['l1']
+                                    and _pair(d)[0]['prof']>_pair(d)[1]['prof'])
+        tot=sum(1 for d in DISTRICTS if _pair(d)[0])
         cmp(f'ov kpi gg {e["st"]}', k[5], f'{gg}/{tot}')
         for i,y in enumerate(MODERN):
             a=A('city',['city'],bk,y,cat)
@@ -101,33 +108,42 @@ for e in REN:
                 cmp(f'ov dist {e["st"]} {y} {key}', e['dist'][li]['v'][i], a[key] if a else None, 1e-5)
         for gi,g in enumerate(['g3','g4','g5','g6','g7','g8']):
             a=A('city',['city'],g,2026,cat); b=A('city',['city'],g,base,cat)
-            cmp(f'ov grades dprof {e["st"]} {g}', e['grades'][0]['v'][gi], (a['prof']-b['prof']) if a and b else None, 1e-5)
-            cmp(f'ov grades dl1 {e["st"]} {g}',   e['grades'][1]['v'][gi], (a['l1']-b['l1']) if a and b else None, 1e-5)
+            cg = a and b and a['gset']==b['gset']
+            cmp(f'ov grades dprof {e["st"]} {g}', e['grades'][0]['v'][gi], (a['prof']-b['prof']) if cg else None, 1e-5)
+            cmp(f'ov grades dl1 {e["st"]} {g}',   e['grades'][1]['v'][gi], (a['l1']-b['l1']) if cg else None, 1e-5)
     elif p=='di':
         base,bk,dim,cat=e['st']; cat=int(cat)
+        # columns depend on the grade band now, so locate them by header name
+        H={h:i for i,h in enumerate(e['cols'])}
+        need=['District','Borough','Tested 2026','Δ tested %','% L3–4 2026','Δ L3–4',
+              '% L1 2026','Δ L1','% L4 2026','Mean score','Signal']
+        for n in need: assert n in H, ('missing column', n, e['cols'])
         for row in e['rows']:
-            d=row[0].replace('District ','')
+            d=row[H['District']].replace('District ','')
             cur=A('dist',[d],bk,2026,cat); bse=A('dist',[d],bk,base,cat)
-            cmp(f'di boro {d}', row[1], BORO_OF[d])
-            n=int(d)
-            cmp(f'di elem {d}', row[2], 'Elem Phase 1' if n in PHASE['elem1'] else 'Elem Phase 2' if n in PHASE['elem2'] else '—')
-            cmp(f'di ms {d}', row[3], 'MS Phase 1' if n in PHASE['ms1'] else 'MS Phase 2' if n in PHASE['ms2'] else '—')
-            # 0 name 1 boro 2 elem 3 ms 4 k5prov 5 k5curr 6 tested 7 dTested%
-            # 8 %L3-4 9 dL3-4 10 %L1 11 dL1 12 %L4 13 mean 14 signal
-            cmp(f'di n {d} {e["st"]}', row[6], numf(cur['n']) if cur else 's')
-            dn = (cur['n']-bse['n'])/bse['n']*100 if cur and bse and bse['n'] else None
-            cmp(f'di dn {d} {e["st"]}', row[7], ppf(dn) if dn is not None else 's')
-            cmp(f'di prof {d} {e["st"]}', row[8], f1(cur['prof']) if cur else 's')
-            cmp(f'di dprof {d} {e["st"]}', row[9], ppf(cur['prof']-bse['prof']) if cur and bse else 's')
-            cmp(f'di l1 {d} {e["st"]}', row[10], f1(cur['l1']) if cur else 's')
-            cmp(f'di dl1 {d} {e["st"]}', row[11], ppf(cur['l1']-bse['l1']) if cur and bse else 's')
-            cmp(f'di l4 {d} {e["st"]}', row[12], f1(cur['l4']) if cur else 's')
-            cmp(f'di mean {d} {e["st"]}', row[13], f1(cur['mean']) if cur else 's')
-            if cur and bse:
+            comparable = cur and bse and cur['gset']==bse['gset']
+            nc = (cur and bse and not comparable)
+            def exp_delta(key):
+                if nc: return 'n/c'
+                if not comparable: return 's'
+                return ppf(cur[key]-bse[key])
+            cmp(f'di boro {d}', row[H['Borough']], BORO_OF[d])
+            cmp(f'di n {d} {e["st"]}', row[H['Tested 2026']], numf(cur['n']) if cur else 's')
+            dn = (cur['n']-bse['n'])/bse['n']*100 if comparable and bse['n'] else None
+            cmp(f'di dn {d} {e["st"]}', row[H['Δ tested %']],
+                'n/c' if nc else (ppf(dn) if dn is not None else 's'))
+            cmp(f'di prof {d} {e["st"]}', row[H['% L3–4 2026']], f1(cur['prof']) if cur else 's')
+            cmp(f'di dprof {d} {e["st"]}', row[H['Δ L3–4']], exp_delta('prof'))
+            cmp(f'di l1 {d} {e["st"]}', row[H['% L1 2026']], f1(cur['l1']) if cur else 's')
+            cmp(f'di dl1 {d} {e["st"]}', row[H['Δ L1']], exp_delta('l1'))
+            cmp(f'di l4 {d} {e["st"]}', row[H['% L4 2026']], f1(cur['l4']) if cur else 's')
+            cmp(f'di mean {d} {e["st"]}', row[H['Mean score']], f1(cur['mean']) if cur else 's')
+            if comparable:
                 dl1=cur['l1']-bse['l1']; dpr=cur['prof']-bse['prof']
                 sig='Improved on both' if dl1<0 and dpr>0 else 'Mixed' if dl1<0 or dpr>0 else 'Worse on both'
             else: sig='—'
-            cmp(f'di sig {d} {e["st"]}', row[14], sig)
+            cmp(f'di sig {d} {e["st"]}', row[H['Signal']], sig)
+
     elif p=='bo':
         base,bk,m=e['st']; key=MET[m]
         for bi,b in enumerate(BOROS):
@@ -201,6 +217,7 @@ for e in REN:
             gids=['%02d'%(i+1) for i in ds]
             cur=A('dist',gids,bk,2026,0); bse=A('dist',gids,bk,base,0)
             if cur and bse: charted.append((n,ds,gids,cur,bse))
+        charted=[r for r in charted if r[3]['gset']==r[4]['gset']]
         charted.sort(key=lambda r:-r[3][key]*good)
         cmp(f've-slope labels {e["st"]}', e['slab'], [f'{n} ({len(ds)})' for n,ds,_,_,_ in charted])
         for i,(n,ds,gids,cur,bse) in enumerate(charted):
@@ -221,7 +238,8 @@ for e in REN:
             for yi,y in enumerate(MODERN):
                 a=A('dist',gids,bk,y,0)
                 cmp(f've-tbl {n} {y} {e["st"]}', trow[3+yi], f1(a[key]) if a else 's')
-            cmp(f've-tbl d {n} {e["st"]}', trow[7], ppf(cur[key]-bse[key]) if bse else 's')
+            cmp(f've-tbl d {n} {e["st"]}', trow[7],
+                ppf(cur[key]-bse[key]) if (bse and cur['gset']==bse['gset']) else 's')
 
 print('='*72); print('RENDER AUDIT — values shown on the page vs independent recomputation'); print('='*72)
 print(f'rendered values checked : {checked:,}')
