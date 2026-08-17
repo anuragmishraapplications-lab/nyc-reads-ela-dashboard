@@ -4,7 +4,7 @@ audit/*.txt
 __pycache__/
 data/school-ela-results-public.xlsx
 data/private/
-email_reply.md
+email_reply*.md
 QC.md
 .preview/
 .claude/launch.json
