@@ -9,7 +9,10 @@
   --navy:#1C355E; --c1:#0070B9; --c2:#00A0DD; --c3:#4F748B; --c4:#6FB0C7; --c5:#6D345F;
   --accent:#0070B9; --pos:#0070B9; --neg:#E86752;
   --l1:#C0483C; --l2:#E8A33D; --l3:#6FB0C7; --l4:#1C355E;
-  --good:#0F7B6C; --bad:#B3382C;
+  /* direction of change. Purple for movement in the direction of improvement,
+     orange against it — deliberately not green/red, at NYCPS's request. These
+     must stay equal to C_UP and C_DOWN in app.js, which drive the charts. */
+  --up:#6A3D8A; --down:#D67C20; --mixed:#94A3B2;
   --sw:246px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -31,7 +34,11 @@ body{background:var(--paper);color:var(--ink);font-family:Hind,sans-serif;line-h
 .sb-f{margin-top:auto;padding:18px 18px 20px;border-top:1px solid rgba(255,255,255,.13);font-size:10px;color:rgba(255,255,255,.45);line-height:1.6}
 .sb-f .cprl-mark{width:100%;max-width:186px;height:auto;display:block;background:#fff;padding:9px 11px;border-radius:8px;margin-bottom:10px}
 .sb-f .sb-by{display:block;font-size:10px;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:6px}
-.sb-f #buildstamp{display:block;font-size:9.5px;color:rgba(255,255,255,.38)}
+.sb-f #buildstamp{display:block;font-size:9.5px;color:rgba(255,255,255,.38);margin-top:7px}
+.sb-kind{display:block;font-size:9.5px;line-height:1.5;border-radius:6px;padding:6px 8px;margin-bottom:2px}
+.sb-kind.public{background:rgba(255,255,255,.08);color:rgba(255,255,255,.62)}
+.sb-kind.internal{background:rgba(214,124,32,.22);color:#F6D9B4;border:1px solid rgba(214,124,32,.5)}
+.sb-kind b{display:block;color:#fff;font-weight:700}
 .sb-f b{color:rgba(255,255,255,.8);font-weight:600}
 
 /* ---------- layout ---------- */
@@ -40,6 +47,7 @@ body{background:var(--paper);color:var(--ink);font-family:Hind,sans-serif;line-h
 .eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);font-weight:700}
 .pt{font-family:'Crimson Text',serif;font-size:30px;font-weight:700;line-height:1.08;margin-top:4px}
 .pst{font-size:13.5px;color:var(--muted);margin-top:7px;max-width:820px;line-height:1.6}
+.pst a{color:var(--accent);font-weight:600}
 .pg{display:none}.pg.ac{display:block}
 
 /* ---------- filters ---------- */
@@ -64,12 +72,21 @@ a.srcbtn{text-decoration:none;display:inline-block}
 .kr.k4{grid-template-columns:repeat(4,1fr)}
 .kc{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:17px 18px 16px;position:relative;overflow:hidden}
 .kc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
-.kc.g::before{background:var(--good)}.kc.b::before{background:var(--bad)}.kc.n::before{background:var(--c3)}
+.kc.g::before{background:var(--up)}.kc.b::before{background:var(--down)}.kc.n::before{background:var(--c3)}
+/* Headline pairs. A level and its change belong together, so each pair shares
+   one accent colour and one tint: proficiency blue, Level 1 red. The pairing
+   has to survive the row wrapping, which is why the breakpoint below goes to
+   two columns rather than three. */
+.kc.pair-p::before{background:var(--c1)}
+.kc.pair-l::before{background:var(--l1)}
+.kc.pair-p{background:linear-gradient(180deg,#F5FAFD 0,var(--card) 62px)}
+.kc.pair-l{background:linear-gradient(180deg,#FDF6F5 0,var(--card) 62px)}
+.kc.pair-p .kl,.kc.pair-l .kl{color:#5A6975}
 .kl{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.07em;line-height:1.4;min-height:28px}
 .kv{font-family:'Crimson Text',serif;font-size:34px;font-weight:700;line-height:1;margin:11px 0 7px;letter-spacing:-.02em}
 .kv small{font-size:17px;font-weight:600}
 .kd{font-size:11px;font-weight:600}
-.kd.up{color:var(--good)}.kd.dn{color:var(--bad)}.kd.fl{color:var(--muted)}
+.kd.up{color:var(--up)}.kd.dn{color:var(--down)}.kd.fl{color:var(--muted)}
 .kx{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.45}
 
 /* ---------- cards ---------- */
@@ -162,7 +179,7 @@ dl.defs dd{margin-left:0;color:#41505C}
 .mkl{display:flex;flex-wrap:wrap;gap:18px;row-gap:9px;margin-top:15px;padding-top:13px;border-top:1px dashed var(--line);line-height:1.5}
 .mkl:empty{display:none}
 .mkl span{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
-@media(max-width:1560px){.kr{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1560px){.kr{grid-template-columns:repeat(2,1fr)}.kr.k4{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:1180px){.g2,.g21{grid-template-columns:1fr}}
 @media(max-width:900px){:root{--sw:0px}.sb{display:none}.mn{padding:18px}.kr{grid-template-columns:repeat(2,1fr)}}
 @media print{.sb{display:none}.mn{margin-left:0}.fb{display:none}.pg{display:block!important}}
@@ -186,10 +203,12 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="ni" data-p="ve"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>Providers &amp; curriculum</div>
     <div class="ni" data-p="sg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>Subgroups &amp; gaps</div>
     <div class="ni" data-p="tf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>Test format</div>
+    <div class="ni" data-p="pa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/><circle cx="12" cy="12" r="10"/></svg>Participation</div>
   </div>
   <div class="sb-f">
     <img class="cprl-mark" src="__LOGO_CPRL__" alt="Center for Public Research and Leadership">
     <span class="sb-by">Prepared by the Center for Public Research and Leadership</span>
+    <span id="buildkind"></span>
     <span id="buildstamp"></span>
   </div>
 </nav>
@@ -204,16 +223,19 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="pst">Citywide ELA results for grades 3 to 8. All percentages are computed from student counts in the NYCPS public files rather than from published percentages. The baseline selector sets the year against which 2026 is compared.</div>
   </div></div>
 
+  <div class="note neut" id="ov-orient"></div>
+
   <div class="fb">
     <div class="fg"><span class="fl">Baseline</span><select id="ov-base"></select></div>
     <div class="fg"><span class="fl">Grades</span><select id="ov-grade"></select></div>
     <div class="fg"><span class="fl">Group</span><select id="ov-dim"></select><select id="ov-cat"></select></div>
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="ov-marks-t" checked> Phase markers</label>
-    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="ov-insight"></div>
+  <div class="note neut" id="ov-scope"></div>
   <div id="ov-supp"></div>
   <div class="kr" id="ov-kpi"></div>
 
@@ -264,7 +286,7 @@ dl.defs dd{margin-left:0;color:#41505C}
   <div class="ph"><div>
     <div class="eyebrow">Community school districts</div>
     <div class="pt">District explorer</div>
-    <div class="pst">Choose a district under Focus to see its own results first, or leave it on all districts to compare across them. Filters combine: adding a second filter narrows the set. Any column can be sorted, and the table can be downloaded as displayed.</div>
+    <div class="pst">Choose a district under Focus to see its own results first, or leave it on all districts to compare across them. Filters combine: adding a second filter narrows the set. Any column can be sorted. The underlying results files can be downloaded from the <a href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">NYCPS InfoHub</a>.</div>
   </div></div>
 
   <div class="fb">
@@ -272,13 +294,14 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Grades</span><select id="di-grade"></select></div>
     <div class="fg"><span class="fl">Group</span><select id="di-dim"></select><select id="di-cat"></select></div>
     <div class="fg"><span class="fl">Focus</span><select id="di-focus-sel"></select></div>
+    <div class="fg"><span class="fl">Districts</span><div id="di-ms-dist"></div></div>
     <div class="fg"><span class="fl">Borough</span><div id="di-ms-boro"></div></div>
     <div class="fg"><span class="fl">Phase</span><div id="di-ms-phase"></div></div>
     <div class="fg"><span class="fl">PL provider</span><div id="di-ms-reads"></div></div>
     <div class="fg"><span class="fl">Curriculum</span><div id="di-ms-curr"></div></div>
     <div class="spacer"></div>
     <button class="btn gh" id="di-reset" type="button">Reset filters</button>
-    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div id="di-focus" style="display:none">
@@ -304,6 +327,15 @@ dl.defs dd{margin-left:0;color:#41505C}
       </div>
     </div>
   </div>
+  <div class="cd" id="di-sg-wrap">
+    <div class="cdh"><div><div class="ct" id="di-sg-title"></div>
+      <div class="cs" id="di-sg-sub"></div></div>
+      <div style="display:flex;gap:8px;align-items:center"><select id="di-sg-dim"></select><button class="btn gh" data-png="di-sg">PNG</button></div></div>
+    <div class="cc lg" id="wrap-di-sg"><canvas id="di-sg"></canvas></div>
+    <div id="di-sg-supp"></div>
+    <div class="tw" style="margin-top:16px"><table id="di-sg-table"></table></div>
+  </div>
+
   <div id="di-active"></div>
   <div id="di-nc"></div>
   <div class="note info" id="di-insight"></div>
@@ -344,9 +376,9 @@ dl.defs dd{margin-left:0;color:#41505C}
       <div class="cs" id="di-tblsub"></div></div></div>
     <div class="tw"><table id="di-table"></table></div>
     <div class="legend" style="margin-top:14px">
-      <span><i class="dot" style="background:#0F7B6C"></i>Improved on both measures</span>
-      <span><i class="dot" style="background:#6FB0C7"></i>Improved on one</span>
-      <span><i class="dot" style="background:#C0483C"></i>Worse on both</span>
+      <span><i class="dot" style="background:var(--up)"></i>Improved on both measures</span>
+      <span><i class="dot" style="background:var(--mixed)"></i>Mixed: improved on one</span>
+      <span><i class="dot" style="background:var(--down)"></i>Worse on both</span>
     </div>
   </div>
 </section>
@@ -371,7 +403,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="bo-marks-t" checked> Phase markers</label>
     <button class="btn gh" id="bo-reset" type="button">Reset filters</button>
-    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div id="bo-focus" style="display:none">
@@ -457,7 +489,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Result</span><select id="ph-metric"></select></div>
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="ph-marks-t" checked> Phase markers</label>
-    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="ph-insight"></div>
@@ -530,7 +562,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="ve-marks-t" checked> Phase markers</label>
     <button class="btn gh" id="ve-reset" type="button">Reset filters</button>
-    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="ve-insight"></div>
@@ -540,7 +572,7 @@ dl.defs dd{margin-left:0;color:#41505C}
   <div class="cd">
     <div class="cdh"><div><div class="ct">Where each group stands, and how far it moved</div>
       <div class="cs" id="ve-sub"></div>
-      <div class="cs">Each row runs from the baseline year (hollow dot) to 2026 (filled dot). The number of districts in the group is in brackets. Green means the movement is in the direction of improvement.</div></div>
+      <div class="cs">Each row runs from the baseline year (hollow dot) to 2026 (filled dot). The number of districts in the group is in brackets. Purple means the movement is in the direction of improvement, orange against it.</div></div>
       <button class="btn gh" data-png="ve-slope">PNG</button></div>
     <div class="cc" id="wrap-ve-slope" style="height:340px"><canvas id="ve-slope"></canvas></div>
   </div>
@@ -576,7 +608,7 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="fg"><span class="fl">Result</span><select id="sg-metric"></select></div>
     <div class="spacer"></div>
     <label class="chk"><input type="checkbox" id="sg-marks-t" checked> Phase markers</label>
-    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="sg-insight"></div>
@@ -602,6 +634,12 @@ dl.defs dd{margin-left:0;color:#41505C}
     <div class="cc" id="wrap-sg-gap"><canvas id="sg-gap"></canvas></div>
     <div class="tw" style="margin-top:16px"><table id="sg-gaptable"></table></div>
   </div>
+
+  <div class="cd">
+    <div class="cdh"><div><div class="ct">Student group names used here, and the source they come from</div>
+      <div class="cs">Every group named on screen, against the exact <code>Category</code> value and tab it is read from in the NYCPS files. Names are spelled out for reading; the underlying value is unchanged, and every lookup in this tool uses the file's own string.</div></div></div>
+    <div class="tw"><table id="sg-glossary"></table></div>
+  </div>
 </section>
 
 <!-- ============ TEST FORMAT ============ -->
@@ -623,7 +661,7 @@ dl.defs dd{margin-left:0;color:#41505C}
   <div class="fb">
     <div class="fg"><span class="fl">Result</span><select id="tf-metric"></select></div>
     <div class="spacer"></div>
-    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports-and-policies/citywide-information-and-data/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
+    <a class="btn gh srcbtn" href="https://infohub.nyced.org/reports/academics/test-results" target="_blank" rel="noopener">Source files (NYCPS InfoHub)</a>
   </div>
 
   <div class="note info" id="tf-insight"></div>
@@ -649,6 +687,60 @@ dl.defs dd{margin-left:0;color:#41505C}
   </div>
 </section>
 
+<!-- ============ PARTICIPATION AND REFUSALS ============ -->
+<section class="pg" id="pg-pa">
+  <div class="ph"><div>
+    <div class="eyebrow">Participation</div>
+    <div class="pt">Test refusals by district</div>
+    <div class="pst">The share of students reported with a refusal code on the grades 3&ndash;8 ELA test, for each community school district. This is the only page in this tool that does not come from the NYCPS results files: those files carry a count of students tested and no enrollment denominator, so no participation rate can be derived from them. The figures here are published by NYSED.</div>
+  </div></div>
+
+  <div class="note warn" id="pa-scope"></div>
+
+  <div class="fb">
+    <div class="fg"><span class="fl">Student group</span><select id="pa-sub"></select></div>
+    <div class="fg"><span class="fl">Year</span><select id="pa-year"></select></div>
+    <div class="fg"><span class="fl">Borough</span><div id="pa-ms-boro"></div></div>
+    <div class="spacer"></div>
+    <button class="btn gh" id="pa-reset" type="button">Reset filters</button>
+    <a class="btn gh srcbtn" href="https://data.nysed.gov/downloads.php" target="_blank" rel="noopener">Source files (NYSED)</a>
+  </div>
+
+  <div id="pa-active"></div>
+  <div class="note info" id="pa-insight"></div>
+  <div class="kr k4" id="pa-kpi"></div>
+
+  <div class="g2">
+    <div class="cd">
+      <div class="cdh"><div><div class="ct" id="pa-trendtitle"></div>
+        <div class="cs">Each line aggregates the districts shown by weighting each district's published refusal rate by its student count. NYSED publishes the rate to one decimal place, so an aggregate carries that rounding.</div></div>
+        <button class="btn gh" data-png="pa-trend">PNG</button></div>
+      <div class="cc" id="wrap-pa-trend"><canvas id="pa-trend"></canvas></div>
+    </div>
+    <div class="cd">
+      <div class="cdh"><div><div class="ct">Refusal rate against proficiency, by district</div>
+        <div class="cs" id="pa-scattersub"></div></div>
+        <button class="btn gh" data-png="pa-scatter">PNG</button></div>
+      <div class="cc" id="wrap-pa-scatter"><canvas id="pa-scatter"></canvas></div>
+      <div class="legend" id="pa-scatter-lg"></div>
+    </div>
+  </div>
+
+  <div class="cd">
+    <div class="cdh"><div><div class="ct" id="pa-ranktitle"></div>
+      <div class="cs">Districts ordered by refusal rate, colored by borough.</div></div>
+      <button class="btn gh" data-png="pa-rank">PNG</button></div>
+    <div class="cc xl" id="wrap-pa-rank"><canvas id="pa-rank"></canvas></div>
+    <div class="legend" id="pa-rank-lg"></div>
+  </div>
+
+  <div class="cd">
+    <div class="cdh"><div><div class="ct" id="pa-tbltitle"></div>
+      <div class="cs" id="pa-tblsub"></div></div></div>
+    <div class="tw"><table id="pa-table"></table></div>
+  </div>
+</section>
+
 <div class="coverage" id="coverage"></div>
 <div class="sources" id="sources"></div>
 <div class="foot" id="foot"></div>
@@ -658,6 +750,7 @@ dl.defs dd{margin-left:0;color:#41505C}
 <script>
 const D = __PAYLOAD__;
 const BUILD = "__BUILD__";
+const BUILDKIND = "__BUILDKIND__";
 __APP__
 </script>
 </body></html>

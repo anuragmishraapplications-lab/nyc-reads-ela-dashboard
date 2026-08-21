@@ -17,15 +17,26 @@ R = os.path.join(os.path.dirname(__file__), '..')
 # ---------------------------------------------------------------------------
 INTERNAL = '--internal' in sys.argv
 
+# ---------------------------------------------------------------------------
+# Provider and curriculum assignments in the PUBLIC build.
+#
+# These were withheld from the public file while approval to share them was
+# outstanding. NYCPS has since asked for the provider and curriculum view to be
+# available to its own staff, and Anurag directed on 17 August 2026 that it be
+# visible in the public build. Set this back to False to restore the split, and
+# the stripping logic below comes back with it.
+# ---------------------------------------------------------------------------
+PUBLIC_INCLUDES_VENDORS = True
+
 tpl   = open(os.path.join(R,'src/template.html')).read()
 app   = open(os.path.join(R,'src/app.js')).read()
 chart = open(os.path.join(R,'vendor/chart.umd.min.js')).read()
 logo_nycreads = open(os.path.join(R,'data/nycreads_logo_b64.txt')).read().strip()
 logo_cprl     = open(os.path.join(R,'data/cprl_formal_b64.txt')).read().strip()
 payload_obj   = json.load(open(os.path.join(R,'data/payload.json')))
-build = datetime.date(2026,8,14).strftime('%-d %B %Y')
+build = datetime.date(2026,8,17).strftime('%-d %B %Y')
 
-if not INTERNAL:
+if not INTERNAL and not PUBLIC_INCLUDES_VENDORS:
     # strip the restricted data from the payload
     payload_obj.pop('vendors', None)
     # drop the providers page markup and its nav entry
@@ -37,9 +48,6 @@ if not INTERNAL:
     for host in ('di-ms-reads','di-ms-curr','bo-ms-reads','bo-ms-curr'):
         tpl = re.sub(r'\s*<div class="fg"><span class="fl">[^<]*</span><div id="%s"></div></div>' % host,
                      '', tpl)
-    # and the third source line describes data this build does not carry
-    tpl = tpl.replace('<div class="sources" id="sources"></div>',
-                      '<div class="sources" id="sources" data-public="1"></div>')
 
 payload = json.dumps(payload_obj, separators=(',',':'))
 
@@ -52,8 +60,9 @@ out = out.replace('__LOGO_CPRL__', logo_cprl)
 out = out.replace('__PAYLOAD__', payload)
 out = out.replace('__APP__', app)
 out = out.replace('__BUILD__', build)
+out = out.replace('__BUILDKIND__', 'internal' if INTERNAL else 'public')
 out = out.replace('__CHARTJS__', chart)
-for tok in ('PAYLOAD','APP','LOGO_NYCREADS','LOGO_CPRL','BUILD','CHARTJS'):
+for tok in ('PAYLOAD','APP','LOGO_NYCREADS','LOGO_CPRL','BUILD','BUILDKIND','CHARTJS'):
     assert '__' + tok + '__' not in out, 'unreplaced token: ' + tok
 
 name = 'NYC_Reads_ELA_Dashboard_INTERNAL.html' if INTERNAL else 'NYC_Reads_ELA_Dashboard.html'
@@ -61,7 +70,7 @@ p = os.path.join(R, name)
 open(p,'w').write(out)
 
 # the public build must not carry provider or curriculum information anywhere
-if not INTERNAL:
+if not INTERNAL and not PUBLIC_INCLUDES_VENDORS:
     low = out.lower()
     # the actual assignment values. "JESP" and "provider" are role words and
     # may appear; the names of providers and curricula may not.

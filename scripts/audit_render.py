@@ -7,7 +7,7 @@ and sign of every change.  Any disagreement is reported.
 import openpyxl, json, os, sys, re
 R = os.path.join(os.path.dirname(__file__), '..')
 YEARS=[2018,2019,2022,2023,2024,2025,2026]; MODERN=[2023,2024,2025,2026]
-CAT_LABEL={'All Students': 'All Students', 'SWD': 'Students with Disabilities', 'Not SWD': 'Students without Disabilities', 'Econ Disadv': 'Economically Disadvantaged Students', 'Not Econ Disadv': 'Students Not Economically Disadvantaged', 'Current ELL': 'Current English Language Learners', 'Ever ELL': 'Ever English Language Learners', 'Never ELL': 'Never English Language Learners', 'Asian': 'Asian', 'Black': 'Black', 'Hispanic': 'Hispanic', 'Multi-Racial': 'Multi-Racial', 'Native American': 'Native American', 'White': 'White', 'Female': 'Female', 'Male': 'Male', 'Neither Female nor Male': 'Neither Female nor Male'}
+CAT_LABEL={'All Students': 'All Students', 'SWD': 'Students with Disabilities', 'Not SWD': 'Students without Disabilities', 'Econ Disadv': 'Economically Disadvantaged Students', 'Not Econ Disadv': 'Students Not Economically Disadvantaged', 'Current ELL': 'Current English Language Learners', 'Ever ELL': 'Former English Language Learners', 'Never ELL': 'Never English Language Learners', 'Asian': 'Asian', 'Black': 'Black', 'Hispanic': 'Hispanic', 'Multi-Racial': 'Multi-Racial', 'Native American': 'Native American', 'White': 'White', 'Female': 'Female', 'Male': 'Male', 'Neither Female nor Male': 'Neither Female nor Male'}
 CATS=['All Students','SWD','Not SWD','Econ Disadv','Not Econ Disadv','Current ELL','Ever ELL',
       'Never ELL','Asian','Black','Hispanic','Multi-Racial','Native American','White',
       'Female','Male','Neither Female nor Male']
@@ -204,7 +204,9 @@ for e in REN:
                 cmp(f'tf trend {gk} {y} {m}', e['trend'][gi]['v'][yi], val, 1e-5)
 
     elif p=='ve':
-        fk,bk,mk,minsize=e['st']; key=MET[mk]; base=2024
+        # the providers page has no baseline in its state tuple, so it uses
+        # the page default, which is 2023 (the first year on the current standards)
+        fk,bk,mk,minsize=e['st']; key=MET[mk]; base=2023
         VEND=json.load(open(os.path.join(R,'data/payload.json')))['vendors']
         FIELD={'k5j':('k5JespRoster','kj'), 'k5c':('k5CurrRoster','kc'),
                'msj':('msJespRoster','mj'), 'msc':('msCurrRoster','mc')}

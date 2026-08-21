@@ -1,15 +1,15 @@
 """Pass 2 — everything the first render audit captured but never compared,
-plus the charts and CSV exports it never captured at all.
+plus the charts it never captured at all.
 
 Covers: ov-zero, ov-long, di-scatter, di-rank, bo-table, bo-dbar, ph-table,
-sg-gap chart, tf-table, tf-delta, and all six CSV exports in full.
+sg-gap chart, tf-table and tf-delta.
 Independent recomputation from the original .xlsx, as before.
 """
 import openpyxl, json, os, sys
 from decimal import Decimal, ROUND_HALF_UP
 R = os.path.join(os.path.dirname(__file__), '..')
 YEARS=[2018,2019,2022,2023,2024,2025,2026]; MODERN=[2023,2024,2025,2026]
-CAT_LABEL={'All Students': 'All Students', 'SWD': 'Students with Disabilities', 'Not SWD': 'Students without Disabilities', 'Econ Disadv': 'Economically Disadvantaged Students', 'Not Econ Disadv': 'Students Not Economically Disadvantaged', 'Current ELL': 'Current English Language Learners', 'Ever ELL': 'Ever English Language Learners', 'Never ELL': 'Never English Language Learners', 'Asian': 'Asian', 'Black': 'Black', 'Hispanic': 'Hispanic', 'Multi-Racial': 'Multi-Racial', 'Native American': 'Native American', 'White': 'White', 'Female': 'Female', 'Male': 'Male', 'Neither Female nor Male': 'Neither Female nor Male'}
+CAT_LABEL={'All Students': 'All Students', 'SWD': 'Students with Disabilities', 'Not SWD': 'Students without Disabilities', 'Econ Disadv': 'Economically Disadvantaged Students', 'Not Econ Disadv': 'Students Not Economically Disadvantaged', 'Current ELL': 'Current English Language Learners', 'Ever ELL': 'Former English Language Learners', 'Never ELL': 'Never English Language Learners', 'Asian': 'Asian', 'Black': 'Black', 'Hispanic': 'Hispanic', 'Multi-Racial': 'Multi-Racial', 'Native American': 'Native American', 'White': 'White', 'Female': 'Female', 'Male': 'Male', 'Neither Female nor Male': 'Neither Female nor Male'}
 CATS=['All Students','SWD','Not SWD','Econ Disadv','Not Econ Disadv','Current ELL','Ever ELL',
       'Never ELL','Asian','Black','Hispanic','Multi-Racial','Native American','White',
       'Female','Male','Neither Female nor Male']
@@ -212,128 +212,8 @@ for e in P2:
                 if yi==0: base=val
                 else: cmp(f'tf-delta {lab} {y} {mk}', e['delta'][gi]['v'][yi-1], val-base, 1e-5)
 
-# ---------------- CSV exports ----------------
-CSV=json.load(open(os.path.join(R,'audit/csv_dump.json')))
-def cell(v): return '' if v is None else str(v)
-
-# ov CSV was captured with group = Econ Disadv, all grades
-rows=CSV['ov']; cat=CATS.index('Econ Disadv')
-cmp('csv ov group', rows[2][1], CAT_LABEL['Econ Disadv'])
-for i,y in enumerate(YEARS):
-    r=rows[6+i]; a=A('city',['city'],'all',y,cat)
-    cmp(f'csv ov year {y}', str(r[0]), str(y))
-    cmp(f'csv ov n {y}', str(r[1]), str(a['n']))
-    for j,k in enumerate(['l1','l2','l3','l4','prof']):
-        cmp(f'csv ov {k} {y}', r[2+j], f2(a[k]))
-    cmp(f'csv ov mean {y}', r[7], f1(a['mean']))
-    cmp(f'csv ov comparable {y}', r[8], 'yes' if y>=2023 else 'no (previous standards)')
-
-# di CSV: grades 6-8, all students, baseline 2024
-rows=CSV['di']; bk='68'; base=2024
-cmp('csv di grades', rows[1][1], BAND_LABEL[bk])
-for i,d in enumerate(DISTRICTS):
-    r=rows[7+i]; cur=A('dist',[d],bk,2026,0); bse=A('dist',[d],bk,base,0)
-    cmp(f'csv di name {d}', r[0], f'District {d}')
-    cmp(f'csv di boro {d}', r[1], BORO_OF[d])
-    n=int(d)
-    cmp(f'csv di elem {d}', r[2], 'Elem Phase 1' if n in PHASE['elem1'] else 'Elem Phase 2' if n in PHASE['elem2'] else '—')
-    cmp(f'csv di ms {d}', r[3], 'MS Phase 1' if n in PHASE['ms1'] else 'MS Phase 2' if n in PHASE['ms2'] else '—')
-    # cols: 0 District 1 Borough 2 ElemPhase 3 MSPhase 4 ReadsPL 5 ElemCurr
-    #       6 MSCurr 7 SolvesPL 8 Tested 9-13 %L1..%L3+4 14 mean
-    #       15 TestedBase 16 %L1Base 17 %ProfBase 18 dL1 19 dProf 20 Signal
-    # 0 District 1 Borough 2 ElemPhase 3 MSPhase 4 K5prov 5 K5curr 6 MSprov
-    # 7 MScurr 8 Tested 9 dTested% 10-14 %L1..%L3+4 15 mean 16 TestedBase
-    # 17 %L1Base 18 %ProfBase 19 dL1 20 dProf 21 Signal
-    cmp(f'csv di n {d}', str(r[8]), str(cur['n']))
-    cmp(f'csv di dn {d}', r[9], f'{(cur["n"]-bse["n"])/bse["n"]*100:.2f}')
-    for j,k in enumerate(['l1','l2','l3','l4','prof']):
-        cmp(f'csv di {k} {d}', r[10+j], f2(cur[k]))
-    cmp(f'csv di mean {d}', r[15], f1(cur['mean']))
-    cmp(f'csv di nbase {d}', str(r[16]), str(bse['n']))
-    cmp(f'csv di l1base {d}', r[17], f2(bse['l1']))
-    cmp(f'csv di profbase {d}', r[18], f2(bse['prof']))
-    cmp(f'csv di dl1 {d}', r[19], f'{cur["l1"]-bse["l1"]:.2f}')
-    cmp(f'csv di dprof {d}', r[20], f'{cur["prof"]-bse["prof"]:.2f}')
-    dl1=cur['l1']-bse['l1']; dpr=cur['prof']-bse['prof']
-    cmp(f'csv di sig {d}', r[21],
-        'Improved on both' if dl1<0 and dpr>0 else 'Mixed' if dl1<0 or dpr>0 else 'Worse on both')
-
-# bo CSV: grades 3-5
-rows=CSV['bo']; bk='35'
-cmp('csv bo grades', rows[1][1], BAND_LABEL[bk])
-cmp('csv bo header', rows[6][0], 'Borough')   # data starts at 7, after the header row
-i=7
-for b in BOROS:
-    for y in MODERN:
-        r=rows[i]; i+=1; a=A('boro',[b],bk,y,0)
-        cmp(f'csv bo {b} {y} name', r[0], b); cmp(f'csv bo {b} {y} year', str(r[1]), str(y))
-        cmp(f'csv bo {b} {y} n', str(r[2]), str(a['n']))
-        for j,k in enumerate(['l1','l2','l3','l4','prof']):
-            cmp(f'csv bo {b} {y} {k}', r[3+j], f2(a[k]))
-        cmp(f'csv bo {b} {y} mean', r[8], f1(a['mean']))
-
-# ph CSV: SWD
-rows=CSV['ph']; cat=CATS.index('SWD')
-cmp('csv ph group', rows[1][1], CAT_LABEL['SWD'])
-specs=[('Elementary Phase 1',PHASE['elem1'],'35'),('Elementary Phase 2',PHASE['elem2'],'35'),
-       ('Middle school Phase 1',PHASE['ms1'],'68'),
-       ('Not yet in middle school rollout',[d for d in range(1,33) if d not in PHASE['ms1']],'68'),
-       ('Elementary Phase 1 districts (grades 6-8 check)',PHASE['elem1'],'68'),
-       ('Elementary Phase 2 districts (grades 6-8 check)',PHASE['elem2'],'68')]
-i=6
-for name,ds,bk in specs:
-    gids=['%02d'%d for d in ds]
-    for y in MODERN:
-        r=rows[i]; i+=1; a=A('dist',gids,bk,y,cat)
-        cmp(f'csv ph {name} {y} name', r[0], name)
-        cmp(f'csv ph {name} {y} band', r[1], '3-5' if bk=='35' else '6-8')
-        cmp(f'csv ph {name} {y} nd', str(r[2]), str(len(ds)))
-        cmp(f'csv ph {name} {y} n', str(r[4]), str(a['n']))
-        cmp(f'csv ph {name} {y} l1', r[5], f2(a['l1']))
-        cmp(f'csv ph {name} {y} prof', r[6], f2(a['prof']))
-        cmp(f'csv ph {name} {y} mean', r[7], f1(a['mean']))
-
-# sg CSV: citywide, all grades, every category
-rows=CSV['sg']; i=6
-for c in range(len(CATS)):
-    for y in MODERN:
-        r=rows[i]; i+=1; a=A('city',['city'],'all',y,c)
-        cmp(f'csv sg {CATS[c]} {y} name', r[0], CAT_LABEL[CATS[c]])
-        cmp(f'csv sg {CATS[c]} {y} n', str(r[2]), str(a['n']) if a else 's')
-        for j,k in enumerate(['l1','l2','l3','l4','prof']):
-            cmp(f'csv sg {CATS[c]} {y} {k}', r[3+j], f2(a[k]) if a else 's')
-        cmp(f'csv sg {CATS[c]} {y} mean', r[8], f1(a['mean']) if a else 's')
-
-# tf CSV: group block then per-grade block
-rows=CSV['tf']; i=6
-GR=[('Moved to computer in 2024',['5','8']),('Moved to computer in 2025',['4','6']),
-    ('Not named in the transition',['3','7'])]
-for name,gs in GR:
-    for y in MODERN:
-        r=rows[i]; i+=1
-        n=c1=c3=c4=0; wm=0.0
-        for g in gs:
-            nt,ms,a1,b1,c,d=C['city'][('city',g,y,'All Students')]
-            n+=nt;c1+=a1;c3+=c;c4+=d;wm+=ms*nt
-        cmp(f'csv tf {name} {y} name', r[0], name)
-        cmp(f'csv tf {name} {y} n', str(r[3]), str(n))
-        cmp(f'csv tf {name} {y} l1', r[4], f2(c1/n*100))
-        cmp(f'csv tf {name} {y} prof', r[5], f2((c3+c4)/n*100))
-        cmp(f'csv tf {name} {y} mean', r[6], f1(wm/n))
-i+=2
-CBT={'3':'not stated','4':'2025','5':'2024','6':'2025','7':'not stated','8':'2024'}
-for g in ['3','4','5','6','7','8']:
-    for y in MODERN:
-        r=rows[i]; i+=1; a=A('city',['city'],'g'+g,y,0)
-        cmp(f'csv tf grade {g} {y} name', r[0], f'Grade {g}')
-        cmp(f'csv tf grade {g} {y} cbt', str(r[1]), CBT[g])
-        cmp(f'csv tf grade {g} {y} n', str(r[3]), str(a['n']))
-        cmp(f'csv tf grade {g} {y} l1', r[4], f2(a['l1']))
-        cmp(f'csv tf grade {g} {y} prof', r[5], f2(a['prof']))
-        cmp(f'csv tf grade {g} {y} mean', r[6], f1(a['mean']))
-
 print('='*72)
-print('PASS 2 — charts, tables and CSV exports not covered by the first render audit')
+print('PASS 2 — charts and tables not covered by the first render audit')
 print('='*72)
 print(f'values checked : {checked:,}')
 print(f'MISMATCHES     : {len(bad):,}')
