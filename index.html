@@ -2779,10 +2779,16 @@ function renderVE(){
    tested, which across these 32 districts runs 13 to 15 percent because it
    also absorbs absence and every other reason a student did not sit.
 
-   The series ends at 2025. NYSED's district files follow local review and
-   verification and 2024-25 is the latest published year, so this page stops
-   one year short of the 2026 results everywhere else in this tool. That is
-   stated on the page.
+   The series ends at 2025, and that is the entire public record as of
+   17 August 2026, not a shortcut. Checked that day: NYSED's downloads page
+   tops out at the 2024-25 Refusals workbook; its 3-8 Assessment Database
+   (the researcher file carrying enrolled / tested / not tested) stops at
+   2020-21; NYC Open Data's ELA results run 2013-2023 with no participation
+   column; and NYCPS's own 2026 Results Summary is proficiency only. NYSED's
+   preliminary 2026 release of 5 August 2026 carries no participation figure
+   and says the public release of all final state assessment data is
+   anticipated for early November 2026. The 2026 refusal figures should
+   appear then; nothing here is estimated or carried forward in the meantime.
    ===================================================================== */
 const REF = D.refusals || null;
 const HAS_REF = !!REF;
@@ -2847,8 +2853,10 @@ function renderPA(){
     + `because it also absorbs absence and every other reason a student did not sit the test. That gap is a citywide figure, and individual districts sit `
     + `a long way either side of it: in ${gapYear} it ranges from ${f1(gapLo.v)}% in District&nbsp;${gapLo.d} to ${f1(gapHi.v)}% in District&nbsp;${gapHi.d}. `
     + `Neither number is an opt-out rate, and nothing on this page is differenced against the NYCPS tested counts used elsewhere in this tool. `
-    + `<b>The series runs ${first} to ${last}.</b> NYSED's district files follow local review and verification and ${last} is the latest year published, `
-    + `so this page stops one year short of the 2026 results shown on every other page. There is no ${MODERN[MODERN.length-1]} refusal figure to show yet.`;
+    + `<b>The series runs ${first} to ${last}, and that is the whole public record.</b> NYSED released preliminary ${MODERN[MODERN.length-1]} proficiency data on 5&nbsp;August&nbsp;${MODERN[MODERN.length-1]} with no participation figures in it, `
+    + `and states that the public release of all final state assessment data is anticipated for <b>early November&nbsp;${MODERN[MODERN.length-1]}</b>, after districts have verified their own data. `
+    + `The ${MODERN[MODERN.length-1]} refusal figures should appear then. Until they do, this page stops one year short of the results shown on every other page: `
+    + `there is no ${MODERN[MODERN.length-1]} opt-out figure published by NYSED, by NYCPS or on NYC Open Data, and none has been estimated or carried forward here.`;
 
   /* ---- KPIs ---- */
   const now = refAgg(sk, yi, geos), then = refAgg(sk, 0, geos);
